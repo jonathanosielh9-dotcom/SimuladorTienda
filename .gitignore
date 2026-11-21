@@ -1,0 +1,28 @@
+cat << 'EOF' > .gitignore
+# Compilación Maven y entorno Java
+target/
+*.class
+*.jar
+*.war
+*.ear
+*.tmp
+*.log
+
+# Secretos y configuración local
+.env
+.env.*
+!.env.example
+
+# Datos de ejecución y persistencia local (no subir datos reales ni JSON de pruebas)
+datos/
+*.json
+!pom.xml
+imagenes/
+
+# IDEs y sistema operativo
+.idea/
+*.iml
+.vscode/
+.DS_Store
+Thumbs.db
+EOF
