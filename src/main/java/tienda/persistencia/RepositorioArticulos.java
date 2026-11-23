@@ -3,7 +3,9 @@ package tienda.persistencia;
 import tienda.modelo.Articulo;
 import tienda.modelo.Categoria;
 
+import java.io.IOException;
 import java.math.BigDecimal;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -72,6 +74,34 @@ public class RepositorioArticulos {
                 articulo.setPrecio(nuevoPrecio);
             }
             articulo.setStock(nuevoStock);
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
+    public void guardarEnJson(Path archivo, PersistenciaJson persistencia) throws IOException {
+        Objects.requireNonNull(archivo, "La ruta del archivo no puede ser nula");
+        Objects.requireNonNull(persistencia, "La instancia de PersistenciaJson no puede ser nula");
+        List<Articulo> copia;
+        lock.readLock().lock();
+        try {
+            copia = new ArrayList<>(articulos.values());
+        } finally {
+            lock.readLock().unlock();
+        }
+        persistencia.guardarArticulos(archivo, copia);
+    }
+
+    public void cargarDesdeJson(Path archivo, PersistenciaJson persistencia) throws IOException {
+        Objects.requireNonNull(archivo, "La ruta del archivo no puede ser nula");
+        Objects.requireNonNull(persistencia, "La instancia de PersistenciaJson no puede ser nula");
+        List<Articulo> cargados = persistencia.cargarArticulos(archivo);
+        lock.writeLock().lock();
+        try {
+            articulos.clear();
+            for (Articulo articulo : cargados) {
+                articulos.put(articulo.getId(), articulo);
+            }
         } finally {
             lock.writeLock().unlock();
         }

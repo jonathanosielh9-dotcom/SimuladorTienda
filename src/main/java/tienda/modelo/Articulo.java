@@ -1,5 +1,7 @@
 package tienda.modelo;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import tienda.excepciones.StockInsuficienteException;
 
 import java.math.BigDecimal;
@@ -13,7 +15,13 @@ public class Articulo {
     private BigDecimal precio;
     private int stock;
 
-    public Articulo(String id, String nombre, Categoria categoria, BigDecimal precio, int stock) {
+    @JsonCreator
+    public Articulo(
+            @JsonProperty("id") String id,
+            @JsonProperty("nombre") String nombre,
+            @JsonProperty("categoria") Categoria categoria,
+            @JsonProperty("precio") BigDecimal precio,
+            @JsonProperty("stock") int stock) {
         if (id == null || id.isBlank()) {
             throw new IllegalArgumentException("El id del artículo no puede estar vacío");
         }

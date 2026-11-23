@@ -2,6 +2,8 @@ package tienda.persistencia;
 
 import tienda.modelo.Pedido;
 
+import java.io.IOException;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -59,6 +61,34 @@ public class RepositorioPedidos {
             return Collections.unmodifiableList(new ArrayList<>(pedidos.values()));
         } finally {
             lock.readLock().unlock();
+        }
+    }
+
+    public void guardarEnJson(Path archivo, PersistenciaJson persistencia) throws IOException {
+        Objects.requireNonNull(archivo, "La ruta del archivo no puede ser nula");
+        Objects.requireNonNull(persistencia, "La instancia de PersistenciaJson no puede ser nula");
+        List<Pedido> copia;
+        lock.readLock().lock();
+        try {
+            copia = new ArrayList<>(pedidos.values());
+        } finally {
+            lock.readLock().unlock();
+        }
+        persistencia.guardarPedidos(archivo, copia);
+    }
+
+    public void cargarDesdeJson(Path archivo, PersistenciaJson persistencia) throws IOException {
+        Objects.requireNonNull(archivo, "La ruta del archivo no puede ser nula");
+        Objects.requireNonNull(persistencia, "La instancia de PersistenciaJson no puede ser nula");
+        List<Pedido> cargados = persistencia.cargarPedidos(archivo);
+        lock.writeLock().lock();
+        try {
+            pedidos.clear();
+            for (Pedido pedido : cargados) {
+                pedidos.put(pedido.getId(), pedido);
+            }
+        } finally {
+            lock.writeLock().unlock();
         }
     }
 }

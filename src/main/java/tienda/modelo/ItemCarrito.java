@@ -1,5 +1,7 @@
 package tienda.modelo;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import tienda.excepciones.StockInsuficienteException;
 
 import java.math.BigDecimal;
@@ -13,6 +15,18 @@ public class ItemCarrito {
     public ItemCarrito(Articulo articulo, int cantidad) throws StockInsuficienteException {
         this.articulo = Objects.requireNonNull(articulo, "El artículo no puede ser nulo");
         actualizarCantidad(cantidad);
+    }
+
+    @JsonCreator
+    public ItemCarrito(
+            @JsonProperty("articulo") Articulo articulo,
+            @JsonProperty("cantidad") int cantidad,
+            @JsonProperty("subtotal") BigDecimal subtotalIgnorado) {
+        this.articulo = Objects.requireNonNull(articulo, "El artículo no puede ser nulo");
+        if (cantidad <= 0) {
+            throw new IllegalArgumentException("La cantidad debe ser mayor a cero");
+        }
+        this.cantidad = cantidad;
     }
 
     public Articulo getArticulo() {

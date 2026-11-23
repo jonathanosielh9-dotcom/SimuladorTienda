@@ -1,5 +1,8 @@
 package tienda.modelo;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -31,6 +34,22 @@ public class Pedido {
         this.total = carrito.calcularTotal();
         this.fechaCreacion = Instant.now();
         this.estado = EstadoPedido.PENDIENTE;
+    }
+
+    @JsonCreator
+    public Pedido(
+            @JsonProperty("id") String id,
+            @JsonProperty("correoUsuario") String correoUsuario,
+            @JsonProperty("items") List<ItemCarrito> items,
+            @JsonProperty("total") BigDecimal total,
+            @JsonProperty("fechaCreacion") Instant fechaCreacion,
+            @JsonProperty("estado") EstadoPedido estado) {
+        this.id = Objects.requireNonNull(id, "El id del pedido no puede ser nulo");
+        this.correoUsuario = Objects.requireNonNull(correoUsuario, "El correo del usuario no puede ser nulo");
+        this.items = items != null ? new ArrayList<>(items) : new ArrayList<>();
+        this.total = Objects.requireNonNull(total, "El total no puede ser nulo");
+        this.fechaCreacion = Objects.requireNonNull(fechaCreacion, "La fecha de creación no puede ser nula");
+        this.estado = Objects.requireNonNull(estado, "El estado no puede ser nulo");
     }
 
     public String getId() {
