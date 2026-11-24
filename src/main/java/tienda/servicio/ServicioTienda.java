@@ -4,6 +4,7 @@ import tienda.excepciones.StockInsuficienteException;
 import tienda.excepciones.TarjetaInvalidaException;
 import tienda.modelo.Articulo;
 import tienda.modelo.Carrito;
+import tienda.modelo.EstadoPedido;
 import tienda.modelo.ItemCarrito;
 import tienda.modelo.Pago;
 import tienda.modelo.Pedido;
@@ -44,11 +45,27 @@ public class ServicioTienda {
     public Pago procesarPago(String pedidoId, String numeroTarjeta) throws TarjetaInvalidaException {
         Pedido pedido = repositorioPedidos.buscarPorId(pedidoId)
                 .orElseThrow(() -> new IllegalArgumentException("Pedido no encontrado: " + pedidoId));
-        if (pedido.getEstado() != tienda.modelo.EstadoPedido.PENDIENTE) {
+        if (pedido.getEstado() != EstadoPedido.PENDIENTE) {
             throw new IllegalStateException("Solo se pueden pagar pedidos en estado PENDIENTE");
         }
         Pago pago = new Pago(pedido.getId(), pedido.getTotal(), numeroTarjeta);
         pedido.marcarPagado();
         return pago;
+    }
+
+    public void cancelarPedido(String pedidoId) {
+        Pedido pedido = repositorioPedidos.buscarPorId(pedidoId)
+                .orElseThrow(() -> new IllegalArgumentException("Pedido no encontrado: " + pedidoId));
+        if (pedido.getEstado() == EstadoPedido.CANCELADO) {
+            throw new IllegalStateException("El pedido ya está cancelado");
+        }
+        boolean estabaPendiente = pedido.getEstado() == EstadoPedido.PENDIENTE;
+        pedido.cancelar();
+        if (estabaPendiente) {
+            for (ItemCarrito item : pedido.getItems()) {
+                repositorioArticulos.buscarPorId(item.getArticulo().getId())
+                        .ifPresent(articulo -> articulo.reponerStock(item.getCantidad()));
+            }
+        }
     }
 }

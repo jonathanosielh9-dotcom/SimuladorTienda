@@ -1,6 +1,7 @@
 package tienda.modelo;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import tienda.excepciones.StockInsuficienteException;
 
@@ -56,6 +57,11 @@ public class Articulo {
     }
 
     public BigDecimal getPrecio() {
+        return precio;
+    }
+
+    @JsonIgnore
+    public BigDecimal getPrecioFinal() {
         return precio;
     }
 

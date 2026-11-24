@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Optional;
 import java.util.Scanner;
 
 public class ConsolaTienda {
@@ -29,6 +30,7 @@ public class ConsolaTienda {
     private final ServicioTienda servicioTienda;
     private final PersistenciaJson persistenciaJson;
     private final Carrito carrito = new Carrito();
+    private volatile boolean guardadoEnSalida = false;
 
     public ConsolaTienda(
             RepositorioArticulos repoArticulos,
@@ -48,8 +50,17 @@ public class ConsolaTienda {
         PersistenciaJson persistenciaJson = new PersistenciaJson();
 
         ConsolaTienda consola = new ConsolaTienda(repoArticulos, repoPedidos, servicioTienda, persistenciaJson);
+        consola.registrarShutdownHook();
         consola.cargarDatosIniciales();
         consola.iniciar();
+    }
+
+    private void registrarShutdownHook() {
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            if (!guardadoEnSalida) {
+                guardarDatosSilencioso("\nCierre detectado. Guardando datos automáticamente...");
+            }
+        }, "autoguardado-shutdown-hook"));
     }
 
     private void cargarDatosIniciales() {
@@ -82,7 +93,13 @@ public class ConsolaTienda {
         System.out.println("6. Listar pedidos y pagar");
         System.out.println("7. Guardar datos en JSON");
         System.out.println("8. Cargar datos desde JSON");
-        System.out.println("0. Salir");
+        System.out.println("9. Actualizar precio y stock");
+        System.out.println("10. Quitar artículo del carrito");
+        System.out.println("11. Vaciar carrito");
+        System.out.println("12. Buscar artículos por categoría");
+        System.out.println("13. Consultar pedidos por correo");
+        System.out.println("14. Cancelar pedido pendiente");
+        System.out.println("0. Salir (autoguarda datos)");
     }
 
     private boolean manejarOpcion(Scanner scanner, int opcion) {
@@ -120,7 +137,33 @@ public class ConsolaTienda {
                     cargarDesdeJson();
                     yield true;
                 }
+                case 9 -> {
+                    actualizarPrecioYStock(scanner);
+                    yield true;
+                }
+                case 10 -> {
+                    quitarArticuloDelCarrito(scanner);
+                    yield true;
+                }
+                case 11 -> {
+                    vaciarCarrito();
+                    yield true;
+                }
+                case 12 -> {
+                    buscarPorCategoria(scanner);
+                    yield true;
+                }
+                case 13 -> {
+                    consultarPedidosPorCorreo(scanner);
+                    yield true;
+                }
+                case 14 -> {
+                    cancelarPedido(scanner);
+                    yield true;
+                }
                 case 0 -> {
+                    guardarDatosSilencioso("Guardando datos antes de salir...");
+                    guardadoEnSalida = true;
                     System.out.println("¡Hasta luego!");
                     yield false;
                 }
@@ -132,6 +175,17 @@ public class ConsolaTienda {
         } catch (IllegalArgumentException | IllegalStateException | StockInsuficienteException | TarjetaInvalidaException | IOException e) {
             System.out.println("Error: " + e.getMessage());
             return true;
+        }
+    }
+
+    private void guardarDatosSilencioso(String mensajePrevio) {
+        System.out.println(mensajePrevio);
+        try {
+            repoArticulos.guardarEnJson(ARCHIVO_ARTICULOS, persistenciaJson);
+            repoPedidos.guardarEnJson(ARCHIVO_PEDIDOS, persistenciaJson);
+            System.out.println("Autoguardado completado en " + ARCHIVO_ARTICULOS + " y " + ARCHIVO_PEDIDOS);
+        } catch (IOException e) {
+            System.out.println("Aviso: no se pudieron autoguardar los datos (" + e.getMessage() + ")");
         }
     }
 
@@ -160,6 +214,24 @@ public class ConsolaTienda {
         }
     }
 
+    private void buscarPorCategoria(Scanner scanner) {
+        Categoria categoria = leerCategoria(scanner);
+        List<Articulo> filtrados = repoArticulos.listarTodos().stream()
+                .filter(a -> a.getCategoria() == categoria)
+                .toList();
+
+        if (filtrados.isEmpty()) {
+            System.out.println("No hay artículos en la categoría " + categoria.name() + ".");
+            return;
+        }
+
+        System.out.println("\n--- Artículos en " + categoria.name() + " ---");
+        for (Articulo a : filtrados) {
+            System.out.printf("[%s] %s | $%s | Stock: %d%n",
+                    a.getId(), a.getNombre(), a.getPrecio(), a.getStock());
+        }
+    }
+
     private void agregarAlCarrito(Scanner scanner) throws StockInsuficienteException {
         listarArticulos();
         String id = leerTexto(scanner, "ID del artículo a agregar: ");
@@ -175,10 +247,34 @@ public class ConsolaTienda {
         }
         System.out.println("\n--- Carrito ---");
         for (ItemCarrito item : carrito.getItems().values()) {
-            System.out.printf("- %s x%d -> Subtotal: $%s%n",
-                    item.getArticulo().getNombre(), item.getCantidad(), item.getSubtotal());
+            System.out.printf("- [%s] %s x%d -> Subtotal: $%s%n",
+                    item.getArticulo().getId(), item.getArticulo().getNombre(), item.getCantidad(), item.getSubtotal());
         }
         System.out.println("Total: $" + carrito.calcularTotal());
+    }
+
+    private void quitarArticuloDelCarrito(Scanner scanner) {
+        if (carrito.estaVacio()) {
+            System.out.println("El carrito está vacío.");
+            return;
+        }
+        verCarrito();
+        String id = leerTexto(scanner, "ID del artículo a quitar: ");
+        if (!carrito.getItems().containsKey(id)) {
+            System.out.println("El artículo con ID '" + id + "' no está en el carrito.");
+            return;
+        }
+        carrito.quitarArticulo(id);
+        System.out.println("Artículo '" + id + "' eliminado del carrito.");
+    }
+
+    private void vaciarCarrito() {
+        if (carrito.estaVacio()) {
+            System.out.println("El carrito ya está vacío.");
+            return;
+        }
+        carrito.vaciar();
+        System.out.println("Carrito vaciado.");
     }
 
     private void crearPedido(Scanner scanner) throws StockInsuficienteException {
@@ -213,6 +309,36 @@ public class ConsolaTienda {
         System.out.println("Pago procesado correctamente. ID de pago: " + pago.getId());
     }
 
+    private void consultarPedidosPorCorreo(Scanner scanner) {
+        String correo = leerTexto(scanner, "Correo del usuario: ");
+        List<Pedido> encontrados = repoPedidos.buscarPorUsuario(correo);
+        if (encontrados.isEmpty()) {
+            System.out.println("No se encontraron pedidos para el correo: " + correo);
+            return;
+        }
+        System.out.println("\n--- Pedidos de " + correo + " ---");
+        for (Pedido p : encontrados) {
+            System.out.printf("ID: %s | Total: $%s | Estado: %s%n",
+                    p.getId(), p.getTotal(), p.getEstado());
+        }
+    }
+
+    private void cancelarPedido(Scanner scanner) {
+        List<Pedido> pedidos = repoPedidos.listarTodos();
+        if (pedidos.isEmpty()) {
+            System.out.println("No hay pedidos registrados.");
+            return;
+        }
+        System.out.println("\n--- Pedidos ---");
+        for (Pedido p : pedidos) {
+            System.out.printf("ID: %s | Cliente: %s | Total: $%s | Estado: %s%n",
+                    p.getId(), p.getCorreoUsuario(), p.getTotal(), p.getEstado());
+        }
+        String pedidoId = leerTexto(scanner, "ID del pedido a cancelar: ");
+        servicioTienda.cancelarPedido(pedidoId);
+        System.out.println("Pedido cancelado: " + pedidoId);
+    }
+
     private void guardarEnJson() throws IOException {
         repoArticulos.guardarEnJson(ARCHIVO_ARTICULOS, persistenciaJson);
         repoPedidos.guardarEnJson(ARCHIVO_PEDIDOS, persistenciaJson);
@@ -223,6 +349,37 @@ public class ConsolaTienda {
         repoArticulos.cargarDesdeJson(ARCHIVO_ARTICULOS, persistenciaJson);
         repoPedidos.cargarDesdeJson(ARCHIVO_PEDIDOS, persistenciaJson);
         System.out.println("Datos cargados desde JSON.");
+    }
+
+    private void actualizarPrecioYStock(Scanner scanner) {
+        listarArticulos();
+        String id = leerTexto(scanner, "ID del artículo a actualizar: ");
+        Optional<Articulo> opt = repoArticulos.buscarPorId(id);
+        if (opt.isEmpty()) {
+            throw new IllegalArgumentException("No existe un artículo con ID: " + id);
+        }
+
+        BigDecimal nuevoPrecio = leerDecimal(scanner, "Nuevo precio: ");
+        int nuevoStock = leerEntero(scanner, "Nuevo stock: ");
+
+        if (nuevoPrecio.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("El precio no puede ser negativo.");
+        }
+        if (nuevoStock < 0) {
+            throw new IllegalArgumentException("El stock no puede ser negativo.");
+        }
+
+        Articulo actual = opt.get();
+        Articulo actualizado = new Articulo(
+                actual.getId(),
+                actual.getNombre(),
+                actual.getCategoria(),
+                nuevoPrecio,
+                nuevoStock
+        );
+        repoArticulos.guardar(actualizado);
+        System.out.printf("Artículo actualizado: [%s] %s -> $%s | Stock: %d%n",
+                actualizado.getId(), actualizado.getNombre(), actualizado.getPrecio(), actualizado.getStock());
     }
 
     private Categoria leerCategoria(Scanner scanner) {

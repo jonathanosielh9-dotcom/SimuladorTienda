@@ -1,62 +1,116 @@
 package tienda.servicio;
 
-import tienda.excepciones.ContrasenaIncorrectaException;
-import tienda.excepciones.CorreoDuplicadoException;
+import io.github.cdimascio.dotenv.Dotenv;
 import tienda.modelo.Autenticable;
 import tienda.modelo.RegistroUsuario;
 import tienda.modelo.Rol;
 import tienda.persistencia.RepositorioUsuarios;
 import tienda.seguridad.HashContrasena;
 
+import java.util.Objects;
 import java.util.Optional;
 
 public class ServicioAutenticacion implements Autenticable {
 
-    private final RepositorioUsuarios repositorio;
+    private static final String PIMIENTA_POR_DEFECTO = "pimienta-predeterminada-simulador-tienda-2026";
+
+    private final RepositorioUsuarios repositorioUsuarios;
     private final HashContrasena hashContrasena;
 
-    public ServicioAutenticacion(RepositorioUsuarios repositorio, HashContrasena hashContrasena) {
-        this.repositorio = repositorio;
-        this.hashContrasena = hashContrasena;
+    public ServicioAutenticacion(RepositorioUsuarios repositorioUsuarios) {
+        this(repositorioUsuarios, new HashContrasena(resolverPimienta()));
     }
 
-    public RegistroUsuario registrar(String correo, String contrasenaPlano, Rol rol)
-            throws CorreoDuplicadoException {
-        if (correo == null || correo.isBlank()) {
-            throw new IllegalArgumentException("El correo no puede estar vacío");
+    public ServicioAutenticacion(RepositorioUsuarios repositorioUsuarios, HashContrasena hashContrasena) {
+        this.repositorioUsuarios = Objects.requireNonNull(repositorioUsuarios, "El repositorio de usuarios es obligatorio");
+        this.hashContrasena = Objects.requireNonNull(hashContrasena, "La utilidad de hash de contraseña es obligatoria");
+    }
+
+    private static String resolverPimienta() {
+        String env = System.getenv("TIENDA_PIMIENTA");
+        if (env != null && !env.isBlank()) {
+            return env.trim();
         }
-        if (contrasenaPlano == null || contrasenaPlano.isBlank()) {
-            throw new IllegalArgumentException("La contraseña no puede estar vacía");
+        try {
+            Dotenv dotenv = Dotenv.configure().ignoreIfMissing().load();
+            String dotVal = dotenv.get("TIENDA_PIMIENTA");
+            if (dotVal != null && !dotVal.isBlank()) {
+                return dotVal.trim();
+            }
+        } catch (RuntimeException ignored) {
         }
-        String correoNormalizado = correo.trim().toLowerCase();
-        if (repositorio.buscarPorCorreo(correoNormalizado).isPresent()) {
-            throw new CorreoDuplicadoException(correoNormalizado);
+        return PIMIENTA_POR_DEFECTO;
+    }
+
+    public RegistroUsuario registrar(String correo, String contrasena, Rol rol) {
+        String correoNormalizado = validarCorreo(correo);
+        validarContrasena(contrasena);
+        Rol rolFinal = Objects.requireNonNull(rol, "El rol es obligatorio");
+
+        if (repositorioUsuarios.buscarPorCorreo(correoNormalizado).isPresent()) {
+            throw new IllegalArgumentException("Ya existe una cuenta registrada con el correo: " + correoNormalizado);
         }
-        String hash = hashContrasena.cifrar(contrasenaPlano);
-        RegistroUsuario nuevo = new RegistroUsuario(
-                correoNormalizado,
-                hash,
-                rol != null ? rol : Rol.USUARIO_REGISTRADO
-        );
-        repositorio.guardar(nuevo);
+
+        String hash = hashContrasena.cifrar(contrasena);
+        RegistroUsuario nuevo = new RegistroUsuario(correoNormalizado, hash, rolFinal);
+        repositorioUsuarios.guardar(nuevo);
         return nuevo;
     }
 
     @Override
     public Optional<RegistroUsuario> autenticar(String correo, String contrasena) {
-        if (correo == null || contrasena == null) {
+        if (correo == null || correo.isBlank() || contrasena == null || contrasena.isEmpty()) {
             return Optional.empty();
         }
-        return repositorio.buscarPorCorreo(correo)
-                .filter(u -> hashContrasena.verificar(contrasena, u.password()));
+        String correoNormalizado = correo.trim().toLowerCase();
+        Optional<RegistroUsuario> encontrado = repositorioUsuarios.buscarPorCorreo(correoNormalizado);
+        if (encontrado.isEmpty()) {
+            return Optional.empty();
+        }
+        RegistroUsuario usuario = encontrado.get();
+        if (usuario.password() == null || usuario.password().isBlank()) {
+            return Optional.empty();
+        }
+        if (hashContrasena.verificar(contrasena, usuario.password())) {
+            return Optional.of(usuario);
+        }
+        return Optional.empty();
     }
 
-    public RegistroUsuario iniciarSesion(String correo, String contrasena)
-            throws ContrasenaIncorrectaException {
-        Optional<RegistroUsuario> encontrado = repositorio.buscarPorCorreo(correo);
-        if (encontrado.isEmpty() || !hashContrasena.verificar(contrasena, encontrado.get().password())) {
-            throw new ContrasenaIncorrectaException("Correo o contraseña incorrectos");
+    public boolean verificarCredencialesAdmin(String correoAdmin, String contrasenaAdmin) {
+        return autenticar(correoAdmin, contrasenaAdmin)
+                .map(u -> u.rol() == Rol.ADMINISTRADOR)
+                .orElse(false);
+    }
+
+    public boolean eliminarUsuarioComoAdmin(String correoAdmin, String contrasenaAdmin, String correoObjetivo) {
+        if (!verificarCredencialesAdmin(correoAdmin, contrasenaAdmin)) {
+            throw new SecurityException("Verificación de administrador fallida: contraseña incorrecta.");
         }
-        return encontrado.get();
+        if (correoObjetivo == null || correoObjetivo.isBlank()) {
+            throw new IllegalArgumentException("El correo del usuario a eliminar no puede estar vacío");
+        }
+        String objetivoNormalizado = correoObjetivo.trim().toLowerCase();
+        if (objetivoNormalizado.equals(correoAdmin.trim().toLowerCase())) {
+            throw new IllegalArgumentException("El administrador no puede eliminar su propia cuenta activa");
+        }
+        return repositorioUsuarios.eliminarPorCorreo(objetivoNormalizado);
+    }
+
+    private String validarCorreo(String correo) {
+        if (correo == null || correo.isBlank()) {
+            throw new IllegalArgumentException("El correo no puede estar vacío");
+        }
+        String normalizado = correo.trim().toLowerCase();
+        if (!normalizado.contains("@") || !normalizado.contains(".")) {
+            throw new IllegalArgumentException("El formato del correo no es válido");
+        }
+        return normalizado;
+    }
+
+    private void validarContrasena(String contrasena) {
+        if (contrasena == null || contrasena.length() < 4) {
+            throw new IllegalArgumentException("La contraseña debe tener al menos 4 caracteres");
+        }
     }
 }
