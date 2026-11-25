@@ -4,10 +4,10 @@ import tienda.excepciones.StockInsuficienteException;
 import tienda.modelo.Articulo;
 import tienda.modelo.Carrito;
 import tienda.modelo.ItemCarrito;
-import tools.jackson.databind.JavaType;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.type.TypeFactory;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -25,7 +25,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class RepositorioCarritos {
 
     private final Path archivo;
-    private final JsonMapper mapper;
+    private final ObjectMapper mapper;
     private final ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     private final Map<String, List<ItemCarrito>> carritosPorUsuario = new LinkedHashMap<>();
 
@@ -37,18 +37,9 @@ public class RepositorioCarritos {
         cargarInicial();
     }
 
-    private JavaType tipoMapaCarritos() {
-        TypeFactory tf = mapper.getTypeFactory();
-        JavaType tipoListaItems = tf.constructCollectionType(ArrayList.class, ItemCarrito.class);
-        return tf.constructMapType(LinkedHashMap.class, tf.constructType(String.class), tipoListaItems);
-    }
-
     private void cargarInicial() {
         lock.writeLock().lock();
         try {
-            if (archivo.getParent() != null) {
-                Files.createDirectories(archivo.getParent());
-            }
             if (Files.exists(archivo) && Files.size(archivo) > 0) {
                 Map<String, List<ItemCarrito>> leidos = mapper.readValue(archivo.toFile(), tipoMapaCarritos());
                 if (leidos != null) {
@@ -108,15 +99,22 @@ public class RepositorioCarritos {
             lock.readLock().unlock();
         }
 
+        if (repoArticulos == null) {
+            return carrito;
+        }
+
         for (ItemCarrito itemGuardado : guardados) {
+            if (itemGuardado == null || itemGuardado.getArticulo() == null) {
+                continue;
+            }
             Optional<Articulo> actualOpt = repoArticulos.buscarPorId(itemGuardado.getArticulo().getId());
             if (actualOpt.isPresent()) {
                 Articulo actual = actualOpt.get();
-                int cantidadAjustada = Math.min(itemGuardado.getCantidad(), actual.getStock());
+                int cantidadAjustada = Math.min(itemGuardado.getCantidad(), Math.max(0, actual.getStock()));
                 if (cantidadAjustada > 0) {
                     try {
                         carrito.agregarArticulo(actual, cantidadAjustada);
-                    } catch (StockInsuficienteException ignored) {
+                    } catch (StockInsuficienteException | IllegalArgumentException ignored) {
                     }
                 }
             }
@@ -155,14 +153,21 @@ public class RepositorioCarritos {
 
     private void escribirAtomico() {
         try {
-            if (archivo.getParent() != null) {
-                Files.createDirectories(archivo.getParent());
+            Path archivoNormalizado = archivo.toAbsolutePath().normalize();
+            Path directorio = archivoNormalizado.getParent();
+            if (directorio == null) {
+                directorio = Path.of(".").toAbsolutePath().normalize();
             }
-            Path temporal = Files.createTempFile(archivo.getParent(), "carritos-", ".tmp");
+            Files.createDirectories(directorio);
+            Path temporal = Files.createTempFile(directorio, "carritos_", ".tmp");
             mapper.writeValue(temporal.toFile(), carritosPorUsuario);
-            Files.move(temporal, archivo, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            Files.move(temporal, archivoNormalizado, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             throw new IllegalStateException("Error al guardar carritos en " + archivo, e);
         }
+    }
+
+    private TypeReference<Map<String, List<ItemCarrito>>> tipoMapaCarritos() {
+        return new TypeReference<>() {};
     }
 }

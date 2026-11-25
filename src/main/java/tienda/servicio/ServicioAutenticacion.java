@@ -1,6 +1,8 @@
 package tienda.servicio;
 
 import io.github.cdimascio.dotenv.Dotenv;
+import tienda.excepciones.ContrasenaIncorrectaException;
+import tienda.excepciones.CorreoDuplicadoException;
 import tienda.modelo.Autenticable;
 import tienda.modelo.RegistroUsuario;
 import tienda.modelo.Rol;
@@ -11,6 +13,9 @@ import java.util.Objects;
 import java.util.Optional;
 
 public class ServicioAutenticacion implements Autenticable {
+
+    public static final String ADMIN_CORREO_INICIAL = "admin@todopoderso.com";
+    public static final String ADMIN_CONTRASENA_INICIAL = "admin123";
 
     private static final String PIMIENTA_POR_DEFECTO = "pimienta-predeterminada-simulador-tienda-2026";
 
@@ -42,13 +47,24 @@ public class ServicioAutenticacion implements Autenticable {
         return PIMIENTA_POR_DEFECTO;
     }
 
-    public RegistroUsuario registrar(String correo, String contrasena, Rol rol) {
+    public RegistroUsuario asegurarAdministradorInicial() {
+        Optional<RegistroUsuario> existente = repositorioUsuarios.buscarPorCorreo(ADMIN_CORREO_INICIAL);
+        if (existente.isPresent()) {
+            return existente.get();
+        }
+        String hash = hashContrasena.cifrar(ADMIN_CONTRASENA_INICIAL);
+        RegistroUsuario admin = new RegistroUsuario(ADMIN_CORREO_INICIAL, hash, Rol.ADMINISTRADOR);
+        repositorioUsuarios.guardar(admin);
+        return admin;
+    }
+
+    public RegistroUsuario registrar(String correo, String contrasena, Rol rol) throws CorreoDuplicadoException {
         String correoNormalizado = validarCorreo(correo);
         validarContrasena(contrasena);
         Rol rolFinal = Objects.requireNonNull(rol, "El rol es obligatorio");
 
         if (repositorioUsuarios.buscarPorCorreo(correoNormalizado).isPresent()) {
-            throw new IllegalArgumentException("Ya existe una cuenta registrada con el correo: " + correoNormalizado);
+            throw new CorreoDuplicadoException("Ya existe una cuenta registrada con el correo: " + correoNormalizado);
         }
 
         String hash = hashContrasena.cifrar(contrasena);
@@ -75,6 +91,14 @@ public class ServicioAutenticacion implements Autenticable {
             return Optional.of(usuario);
         }
         return Optional.empty();
+    }
+
+    public boolean eliminarCuenta(String correo, String contrasena) throws ContrasenaIncorrectaException {
+        String correoNormalizado = validarCorreo(correo);
+        if (contrasena == null || contrasena.isBlank() || autenticar(correoNormalizado, contrasena).isEmpty()) {
+            throw new ContrasenaIncorrectaException("Contraseña incorrecta para eliminar la cuenta");
+        }
+        return repositorioUsuarios.eliminarPorCorreo(correoNormalizado);
     }
 
     public boolean verificarCredencialesAdmin(String correoAdmin, String contrasenaAdmin) {

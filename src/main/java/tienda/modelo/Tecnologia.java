@@ -4,11 +4,13 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Objects;
 
-public class ArticuloTecnologia extends Articulo {
+public class Tecnologia extends Articulo {
+
+    private static final BigDecimal FACTOR_IVA = new BigDecimal("1.16");
 
     private int garantiaMeses;
 
-    public ArticuloTecnologia(String id, String nombre, BigDecimal precio, int stock, int garantiaMeses) {
+    public Tecnologia(String id, String nombre, BigDecimal precio, int stock, int garantiaMeses) {
         super(id, nombre, Categoria.ELECTRONICA, precio, stock);
         setGarantiaMeses(garantiaMeses);
     }
@@ -26,10 +28,7 @@ public class ArticuloTecnologia extends Articulo {
 
     @Override
     public BigDecimal getPrecioFinal() {
-        // Pequeño recargo por cobertura extendida si la garantía supera 12 meses (5%)
-        if (garantiaMeses > 12) {
-            return getPrecio().multiply(new BigDecimal("1.05")).setScale(2, RoundingMode.HALF_UP);
-        }
-        return Objects.requireNonNull(getPrecio());
+        BigDecimal base = Objects.requireNonNull(getPrecio());
+        return base.multiply(FACTOR_IVA).setScale(2, RoundingMode.HALF_UP);
     }
 }

@@ -109,12 +109,15 @@ public class RepositorioUsuarios {
 
     private void escribirAtomico(List<RegistroUsuario> usuarios) {
         try {
-            if (archivo.getParent() != null) {
-                Files.createDirectories(archivo.getParent());
+            Path archivoNormalizado = archivo.toAbsolutePath().normalize();
+            Path directorio = archivoNormalizado.getParent();
+            if (directorio == null) {
+                directorio = Path.of(".").toAbsolutePath().normalize();
             }
-            Path temporal = Files.createTempFile(archivo.getParent(), "usuarios-", ".tmp");
+            Files.createDirectories(directorio);
+            Path temporal = Files.createTempFile(directorio, "usuarios_", ".tmp");
             mapper.writeValue(temporal.toFile(), usuarios);
-            Files.move(temporal, archivo, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            Files.move(temporal, archivoNormalizado, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
             throw new IllegalStateException("Error al guardar usuarios en " + archivo, e);
         }

@@ -30,6 +30,18 @@ public class RepositorioArticulos {
         }
     }
 
+    public boolean eliminarPorId(String id) {
+        if (id == null || id.isBlank()) {
+            return false;
+        }
+        lock.writeLock().lock();
+        try {
+            return articulos.remove(id.trim()) != null;
+        } finally {
+            lock.writeLock().unlock();
+        }
+    }
+
     public Optional<Articulo> buscarPorId(String id) {
         if (id == null || id.isBlank()) {
             return Optional.empty();

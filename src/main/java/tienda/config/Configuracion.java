@@ -2,7 +2,15 @@ package tienda.config;
 
 import io.github.cdimascio.dotenv.Dotenv;
 
+import java.nio.file.Path;
+
 public final class Configuracion {
+
+    public static final Path ARCHIVO_CATALOGO = Path.of("catalogo.json");
+    public static final Path ARCHIVO_USUARIOS = Path.of("usuarios.json");
+    public static final Path ARCHIVO_PEDIDOS = Path.of("pedidos.json");
+    public static final Path CARPETA_IMAGENES = Path.of("imagenes");
+    public static final Path IMAGEN_GENERICA = CARPETA_IMAGENES.resolve("generica.png");
 
     private static final Dotenv ENV = Dotenv.configure().ignoreIfMissing().load();
 

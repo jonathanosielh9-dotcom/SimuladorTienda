@@ -76,7 +76,7 @@ class PersistenciaJsonTest {
         repoPedidosOrigen.guardarEnJson(archivoPedidos, persistencia);
 
         RepositorioArticulos repoArticulosDestino = new RepositorioArticulos();
-        repoArticulosDestino.guardar(new Articulo("ART-VIEJO", "Artículo Temporal", Categoria.HOGAR, new BigDecimal("10.00"), 1));
+        repoArticulosDestino.guardar(new Articulo("ART-VIEJO", "Artículo Temporal", Categoria.ALIMENTOS, new BigDecimal("10.00"), 1));
         repoArticulosDestino.cargarDesdeJson(archivoArticulos, persistencia);
 
         RepositorioPedidos repoPedidosDestino = new RepositorioPedidos();

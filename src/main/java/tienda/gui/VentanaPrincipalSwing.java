@@ -6,7 +6,25 @@ import tienda.excepciones.CorreoDuplicadoException;
 import tienda.excepciones.StockInsuficienteException;
 import tienda.excepciones.TarjetaInvalidaException;
 import tienda.modelo.Alimento;
+import tienda.modelo.Abarrotes;
+import tienda.modelo.Alimento;
 import tienda.modelo.Articulo;
+import tienda.modelo.Celular;
+import tienda.modelo.Computadora;
+import tienda.modelo.Frutas;
+import tienda.modelo.Lacteos;
+import tienda.modelo.Laptop;
+import tienda.modelo.Moda;
+import tienda.modelo.PantalonHombre;
+import tienda.modelo.PantalonMujer;
+import tienda.modelo.Salchichoneria;
+import tienda.modelo.SueterHombre;
+import tienda.modelo.SueterMujer;
+import tienda.modelo.Tecnologia;
+import tienda.modelo.Television;
+import tienda.modelo.TenisHombre;
+import tienda.modelo.TenisMujer;
+import tienda.modelo.Verduras;
 import tienda.modelo.Moda;
 import tienda.modelo.Tecnologia;
 import tienda.modelo.Carrito;
@@ -35,6 +53,7 @@ import javax.swing.BoxLayout;
 import javax.swing.ImageIcon;
 import javax.swing.JButton;
 import javax.swing.JComboBox;
+import javax.swing.JCheckBox;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
 import javax.swing.JOptionPane;
@@ -238,7 +257,13 @@ public class VentanaPrincipalSwing extends JFrame {
         tabbedPane.addTab("Carrito y Pago", construirTabCarrito());
         tabbedPane.addTab("Mis Pedidos", construirTabPedidos());
 
-        panelAdminTab = construirTabAdmin();
+panelAdminTab = construirTabAdmin();
+tabbedPane.addChangeListener(e -> {
+    int idxCarrito = tabbedPane.indexOfTab("Carrito y Pago");
+    if (idxCarrito != -1 && tabbedPane.getSelectedIndex() == idxCarrito) {
+        verificarStockAlAbrirCarrito();
+    }
+});
         panel.add(tabbedPane, BorderLayout.CENTER);
 
         return panel;
@@ -430,6 +455,11 @@ public class VentanaPrincipalSwing extends JFrame {
         bottomAdmin.setPreferredSize(new Dimension(0, 180));
         bottomAdmin.setBorder(BorderFactory.createTitledBorder("Todos los Pedidos del Sistema"));
         bottomAdmin.add(new JScrollPane(tablaAdminPedidos), BorderLayout.CENTER);
+JPanel barraAdminUsuarios = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+JButton btnEliminarUsuario = new JButton("Eliminar usuario");
+btnEliminarUsuario.addActionListener(e -> eliminarUsuarioComoAdminSwing());
+barraAdminUsuarios.add(btnEliminarUsuario);
+bottomAdmin.add(barraAdminUsuarios, BorderLayout.SOUTH);
 
         tab.add(topAdmin, BorderLayout.CENTER);
         tab.add(bottomAdmin, BorderLayout.SOUTH);
@@ -557,7 +587,7 @@ public class VentanaPrincipalSwing extends JFrame {
         }
     }
 
-    private void mostrarImagenArticuloSeleccionado() {
+        private void mostrarImagenArticuloSeleccionado() {
         int fila = tablaCatalogo.getSelectedRow();
         if (fila < 0) {
             lblPreviewImagen.setIcon(null);
@@ -584,7 +614,7 @@ public class VentanaPrincipalSwing extends JFrame {
         lblPreviewImagen.setText(gestorImagenes.textoRespaldoImagen(art.getNombre()));
     }
 
-    private void agregarSeleccionadoAlCarrito() {
+private void agregarSeleccionadoAlCarrito() {
         int fila = tablaCatalogo.getSelectedRow();
         if (fila < 0) {
             JOptionPane.showMessageDialog(this, "Selecciona un artículo del catálogo.");
@@ -832,42 +862,123 @@ public class VentanaPrincipalSwing extends JFrame {
         JTextField txtId = new JTextField(12);
         JTextField txtNombre = new JTextField(18);
         JComboBox<Categoria> cmbCategoria = new JComboBox<>(Categoria.values());
+        JComboBox<String> cmbSubtipo = new JComboBox<>();
+        JComboBox<String> cmbGenero = new JComboBox<>(new String[]{"HOMBRE", "MUJER"});
         JTextField txtPrecio = new JTextField(10);
         JSpinner spnStock = new JSpinner(new SpinnerNumberModel(10, 0, 100000, 1));
         JTextField txtExtra1 = new JTextField(LocalDate.now().plusDays(15).toString(), 14);
-        JTextField txtExtra2 = new JTextField("Negro", 14);
+        JTextField txtExtra2 = new JTextField("16", 14);
+        JTextField txtExtra3 = new JTextField("4K", 14);
+        JCheckBox chkBoolExtra = new JCheckBox("Activo", false);
+        JLabel lblSubtipo = new JLabel("Subtipo:");
+        JLabel lblGenero = new JLabel("Género:");
         JLabel lblExtra1 = new JLabel("Caducidad (YYYY-MM-DD):");
-        JLabel lblExtra2 = new JLabel("Color:");
+        JLabel lblExtra2 = new JLabel("Dato adicional:");
+        JLabel lblExtra3 = new JLabel("Resolución:");
+        JLabel lblBoolExtra = new JLabel("Característica:");
 
-        Runnable actualizarCamposExtra = () -> {
+        Runnable actualizarCamposDetalle = () -> {
             Categoria cat = (Categoria) cmbCategoria.getSelectedItem();
+            String sub = (String) cmbSubtipo.getSelectedItem();
+            boolean esRopa = (cat == Categoria.ROPA);
+            lblGenero.setVisible(esRopa);
+            cmbGenero.setVisible(esRopa);
+
             if (cat == Categoria.ALIMENTOS) {
+                lblExtra1.setVisible(true);
+                txtExtra1.setVisible(true);
                 lblExtra1.setText("Caducidad (YYYY-MM-DD):");
-                txtExtra1.setText(LocalDate.now().plusDays(15).toString());
+                if (txtExtra1.getText().isBlank() || !txtExtra1.getText().contains("-")) {
+                    txtExtra1.setText(LocalDate.now().plusDays(15).toString());
+                }
                 lblExtra2.setVisible(false);
                 txtExtra2.setVisible(false);
+                lblExtra3.setVisible(false);
+                txtExtra3.setVisible(false);
+                boolean usaBool = "Lacteos".equals(sub) || "Frutas".equals(sub) || "Verduras".equals(sub);
+                lblBoolExtra.setVisible(usaBool);
+                chkBoolExtra.setVisible(usaBool);
+                if ("Lacteos".equals(sub)) {
+                    lblBoolExtra.setText("Lácteo:");
+                    chkBoolExtra.setText("Deslactosado");
+                } else if ("Frutas".equals(sub) || "Verduras".equals(sub)) {
+                    lblBoolExtra.setText("Cultivo:");
+                    chkBoolExtra.setText("Orgánico");
+                }
             } else if (cat == Categoria.ELECTRONICA) {
+                lblBoolExtra.setVisible(false);
+                chkBoolExtra.setVisible(false);
+                lblExtra1.setVisible(true);
+                txtExtra1.setVisible(true);
                 lblExtra1.setText("Garantía (meses):");
-                txtExtra1.setText("12");
-                lblExtra2.setVisible(false);
-                txtExtra2.setVisible(false);
-            } else if (cat == Categoria.ROPA) {
-                lblExtra1.setText("Talla:");
-                txtExtra1.setText("M");
-                lblExtra2.setText("Color:");
-                txtExtra2.setText("Negro");
+                if (!txtExtra1.getText().trim().matches("\\d+")) {
+                    txtExtra1.setText("12");
+                }
                 lblExtra2.setVisible(true);
                 txtExtra2.setVisible(true);
-            } else {
-                lblExtra1.setText("Dato extra (opcional):");
-                txtExtra1.setText("");
+                boolean esTv = "Television".equals(sub);
+                lblExtra3.setVisible(esTv);
+                txtExtra3.setVisible(esTv);
+                if ("Computadora".equals(sub)) {
+                    lblExtra2.setText("Procesador:");
+                    txtExtra2.setText("Intel Core i7");
+                } else if ("Laptop".equals(sub)) {
+                    lblExtra2.setText("RAM (GB):");
+                    txtExtra2.setText("16");
+                } else if ("Celular".equals(sub)) {
+                    lblExtra2.setText("Almacenamiento (GB):");
+                    txtExtra2.setText("256");
+                } else if (esTv) {
+                    lblExtra2.setText("Pulgadas:");
+                    txtExtra2.setText("55");
+                    lblExtra3.setText("Resolución:");
+                    if (txtExtra3.getText().isBlank()) {
+                        txtExtra3.setText("4K");
+                    }
+                }
+            } else if (cat == Categoria.ROPA) {
+                lblBoolExtra.setVisible(false);
+                chkBoolExtra.setVisible(false);
                 lblExtra2.setVisible(false);
                 txtExtra2.setVisible(false);
+                lblExtra3.setVisible(false);
+                txtExtra3.setVisible(false);
+                lblExtra1.setVisible(true);
+                txtExtra1.setVisible(true);
+                lblExtra1.setText("Talla:");
+                if ("Tenis".equals(sub)) {
+                    txtExtra1.setText("27");
+                } else if (txtExtra1.getText().isBlank() || txtExtra1.getText().contains("-") || txtExtra1.getText().trim().matches("\\d+")) {
+                    txtExtra1.setText("M");
+                }
             }
         };
 
-        cmbCategoria.addActionListener(e -> actualizarCamposExtra.run());
-        actualizarCamposExtra.run();
+        Runnable poblarSubtipos = () -> {
+            Categoria cat = (Categoria) cmbCategoria.getSelectedItem();
+            cmbSubtipo.removeAllItems();
+            if (cat == Categoria.ALIMENTOS) {
+                cmbSubtipo.addItem("Lacteos");
+                cmbSubtipo.addItem("Frutas");
+                cmbSubtipo.addItem("Verduras");
+                cmbSubtipo.addItem("Abarrotes");
+                cmbSubtipo.addItem("Salchichoneria");
+            } else if (cat == Categoria.ELECTRONICA) {
+                cmbSubtipo.addItem("Computadora");
+                cmbSubtipo.addItem("Laptop");
+                cmbSubtipo.addItem("Celular");
+                cmbSubtipo.addItem("Television");
+            } else if (cat == Categoria.ROPA) {
+                cmbSubtipo.addItem("Pantalon");
+                cmbSubtipo.addItem("Sueter");
+                cmbSubtipo.addItem("Tenis");
+            }
+            actualizarCamposDetalle.run();
+        };
+
+        cmbCategoria.addActionListener(e -> poblarSubtipos.run());
+        cmbSubtipo.addActionListener(e -> actualizarCamposDetalle.run());
+        poblarSubtipos.run();
 
         JPanel form = new JPanel(new java.awt.GridLayout(0, 2, 6, 6));
         form.add(new JLabel("ID:"));
@@ -876,6 +987,10 @@ public class VentanaPrincipalSwing extends JFrame {
         form.add(txtNombre);
         form.add(new JLabel("Categoría:"));
         form.add(cmbCategoria);
+        form.add(lblSubtipo);
+        form.add(cmbSubtipo);
+        form.add(lblGenero);
+        form.add(cmbGenero);
         form.add(new JLabel("Precio base:"));
         form.add(txtPrecio);
         form.add(new JLabel("Stock inicial:"));
@@ -884,6 +999,10 @@ public class VentanaPrincipalSwing extends JFrame {
         form.add(txtExtra1);
         form.add(lblExtra2);
         form.add(txtExtra2);
+        form.add(lblExtra3);
+        form.add(txtExtra3);
+        form.add(lblBoolExtra);
+        form.add(chkBoolExtra);
 
         int res = JOptionPane.showConfirmDialog(
                 this,
@@ -906,22 +1025,61 @@ public class VentanaPrincipalSwing extends JFrame {
             }
             String nombre = txtNombre.getText().trim();
             Categoria categoria = (Categoria) cmbCategoria.getSelectedItem();
+            String subtipo = (String) cmbSubtipo.getSelectedItem();
+            String genero = (String) cmbGenero.getSelectedItem();
             BigDecimal precio = new BigDecimal(txtPrecio.getText().trim());
             int stock = (Integer) spnStock.getValue();
 
             Articulo nuevo;
             if (categoria == Categoria.ALIMENTOS) {
                 LocalDate caducidad = LocalDate.parse(txtExtra1.getText().trim());
-                nuevo = new Alimento(id, nombre, precio, stock, caducidad);
+                boolean flag = chkBoolExtra.isSelected();
+                if ("Lacteos".equals(subtipo)) {
+                    nuevo = new Lacteos(id, nombre, precio, stock, caducidad, flag);
+                } else if ("Frutas".equals(subtipo)) {
+                    nuevo = new Frutas(id, nombre, precio, stock, caducidad, flag);
+                } else if ("Verduras".equals(subtipo)) {
+                    nuevo = new Verduras(id, nombre, precio, stock, caducidad, flag);
+                } else if ("Salchichoneria".equals(subtipo)) {
+                    nuevo = new Salchichoneria(id, nombre, precio, stock, caducidad);
+                } else {
+                    nuevo = new Abarrotes(id, nombre, precio, stock, caducidad);
+                }
             } else if (categoria == Categoria.ELECTRONICA) {
                 int garantia = Integer.parseInt(txtExtra1.getText().trim());
-                nuevo = new Tecnologia(id, nombre, precio, stock, garantia);
+                String extra2 = txtExtra2.getText().trim();
+                String extra3 = txtExtra3.getText().trim();
+                if ("Computadora".equals(subtipo)) {
+                    nuevo = new Computadora(id, nombre, precio, stock, garantia, extra2);
+                } else if ("Laptop".equals(subtipo)) {
+                    nuevo = new Laptop(id, nombre, precio, stock, garantia, Integer.parseInt(extra2));
+                } else if ("Celular".equals(subtipo)) {
+                    nuevo = new Celular(id, nombre, precio, stock, garantia, Integer.parseInt(extra2));
+                } else if ("Television".equals(subtipo)) {
+                    nuevo = new Television(id, nombre, precio, stock, garantia, Integer.parseInt(extra2), extra3);
+                } else {
+                    nuevo = new Tecnologia(id, nombre, precio, stock, garantia);
+                }
             } else if (categoria == Categoria.ROPA) {
                 String talla = txtExtra1.getText().trim();
-                String color = txtExtra2.getText().trim();
-                nuevo = new Moda(id, nombre, precio, stock, talla, color);
+                boolean esHombre = "HOMBRE".equals(genero);
+                if ("Pantalon".equals(subtipo)) {
+                    nuevo = esHombre
+                            ? new PantalonHombre(id, nombre, precio, stock, talla)
+                            : new PantalonMujer(id, nombre, precio, stock, talla);
+                } else if ("Sueter".equals(subtipo)) {
+                    nuevo = esHombre
+                            ? new SueterHombre(id, nombre, precio, stock, talla)
+                            : new SueterMujer(id, nombre, precio, stock, talla);
+                } else if ("Tenis".equals(subtipo)) {
+                    nuevo = esHombre
+                            ? new TenisHombre(id, nombre, precio, stock, talla)
+                            : new TenisMujer(id, nombre, precio, stock, talla);
+                } else {
+                    nuevo = new Moda(id, nombre, precio, stock, talla);
+                }
             } else {
-                nuevo = new Articulo(id, nombre, categoria, precio, stock);
+                throw new IllegalArgumentException("Categoría no soportada: " + categoria);
             }
 
             repoArticulos.guardar(nuevo);
@@ -950,6 +1108,77 @@ public class VentanaPrincipalSwing extends JFrame {
             repoPedidos.guardarEnJson(Configuracion.ARCHIVO_PEDIDOS, persistencia);
             guardarCarritoSiAplica();
         } catch (IOException ignored) {
+        }
+    }
+
+    private void verificarStockAlAbrirCarrito() {
+        List<ItemCarrito> sinStock = servicioTienda.detectarArticulosSinStock(carritoActual);
+        if (sinStock.isEmpty()) {
+            return;
+        }
+        StringBuilder nombres = new StringBuilder();
+        for (ItemCarrito item : sinStock) {
+            nombres.append("- ").append(item.getArticulo().getNombre())
+                   .append(" (solicitado: ").append(item.getCantidad()).append(")\n");
+        }
+        int opcion = JOptionPane.showOptionDialog(
+                this,
+                "Los siguientes artículos en tu carrito no tienen stock disponible:\n\n" + nombres
+                        + "\n¿Deseas eliminarlos del carrito ahora?",
+                "Artículos sin stock",
+                JOptionPane.YES_NO_OPTION,
+                JOptionPane.WARNING_MESSAGE,
+                null,
+                new Object[]{"Eliminar sin stock", "Mantener por ahora"},
+                "Eliminar sin stock"
+        );
+        if (opcion == JOptionPane.YES_OPTION) {
+            limpiarArticulosSinStock();
+        }
+    }
+
+    private void eliminarUsuarioComoAdminSwing() {
+        if (esInvitado || usuarioActual == null || usuarioActual.rol() != Rol.ADMINISTRADOR) {
+            JOptionPane.showMessageDialog(this, "Acción exclusiva de administrador.");
+            return;
+        }
+        String correoObjetivo = JOptionPane.showInputDialog(
+                this,
+                "Correo del usuario registrado a eliminar:"
+        );
+        if (correoObjetivo == null || correoObjetivo.isBlank()) {
+            return;
+        }
+        JPasswordField campoPassAdmin = new JPasswordField();
+        int confirm = JOptionPane.showConfirmDialog(
+                this,
+                campoPassAdmin,
+                "Confirma tu contraseña de administrador:",
+                JOptionPane.OK_CANCEL_OPTION,
+                JOptionPane.WARNING_MESSAGE
+        );
+        if (confirm != JOptionPane.OK_OPTION) {
+            return;
+        }
+        try {
+            boolean eliminado = servicioAuth.eliminarUsuarioComoAdmin(
+                    usuarioActual.user(),
+                    new String(campoPassAdmin.getPassword()),
+                    correoObjetivo
+            );
+            if (eliminado) {
+                repoCarritos.eliminarCarritoUsuario(correoObjetivo);
+                persistirEstadoSilencioso();
+                refrescarTodo();
+                JOptionPane.showMessageDialog(
+                        this,
+                        "Usuario eliminado y su carrito borrado. Su historial de pedidos se conserva."
+                );
+            } else {
+                JOptionPane.showMessageDialog(this, "No se encontró un usuario con ese correo.");
+            }
+        } catch (SecurityException | IllegalArgumentException ex) {
+            JOptionPane.showMessageDialog(this, ex.getMessage(), "Error al eliminar usuario", JOptionPane.ERROR_MESSAGE);
         }
     }
 }

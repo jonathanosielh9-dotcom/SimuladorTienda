@@ -10,12 +10,22 @@ import java.util.Objects;
 
 public class Carrito {
 
+    public static final int MAX_ARTICULOS = 15;
+
     private final Map<String, ItemCarrito> items = new LinkedHashMap<>();
 
     public void agregarArticulo(Articulo articulo, int cantidad) throws StockInsuficienteException {
         Objects.requireNonNull(articulo, "El artículo no puede ser nulo");
         if (cantidad <= 0) {
             throw new IllegalArgumentException("La cantidad debe ser mayor a cero");
+        }
+        int totalActual = items.values().stream()
+                .mapToInt(ItemCarrito::getCantidad)
+                .sum();
+        if (totalActual + cantidad > MAX_ARTICULOS) {
+            throw new IllegalArgumentException(
+                    "El carrito no puede superar los " + MAX_ARTICULOS + " artículos"
+            );
         }
         ItemCarrito existente = items.get(articulo.getId());
         int nuevaCantidadTotal = (existente != null ? existente.getCantidad() : 0) + cantidad;

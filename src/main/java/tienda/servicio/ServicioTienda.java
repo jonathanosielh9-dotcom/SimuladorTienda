@@ -11,7 +11,10 @@ import tienda.modelo.Pedido;
 import tienda.persistencia.RepositorioArticulos;
 import tienda.persistencia.RepositorioPedidos;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 
 public class ServicioTienda {
 
@@ -30,7 +33,46 @@ public class ServicioTienda {
         carrito.agregarArticulo(articulo, cantidad);
     }
 
+    public List<ItemCarrito> detectarArticulosSinStock(Carrito carrito) {
+        Objects.requireNonNull(carrito, "El carrito no puede ser nulo");
+        List<ItemCarrito> problemáticos = new ArrayList<>();
+        for (ItemCarrito item : carrito.getItems().values()) {
+            Optional<Articulo> actual = repositorioArticulos.buscarPorId(item.getArticulo().getId());
+            if (actual.isEmpty() || actual.get().getStock() < item.getCantidad() || actual.get().getStock() <= 0) {
+                problemáticos.add(item);
+            }
+        }
+        return problemáticos;
+    }
+
+    public void validarStockCarrito(Carrito carrito) throws StockInsuficienteException {
+        List<ItemCarrito> problemáticos = detectarArticulosSinStock(carrito);
+        if (!problemáticos.isEmpty()) {
+            ItemCarrito primero = problemáticos.get(0);
+            int disponible = repositorioArticulos.buscarPorId(primero.getArticulo().getId())
+                    .map(Articulo::getStock)
+                    .orElse(0);
+            throw new StockInsuficienteException(
+                    "Stock insuficiente o agotado para '" + primero.getArticulo().getNombre()
+                            + "' (solicitado: " + primero.getCantidad() + ", disponible: " + disponible + ")"
+            );
+        }
+    }
+
+    public boolean eliminarArticuloEnCascada(String articuloId, Iterable<Carrito> carritosActivos) {
+        boolean eliminado = repositorioArticulos.eliminarPorId(articuloId);
+        if (articuloId != null && carritosActivos != null) {
+            for (Carrito carrito : carritosActivos) {
+                if (carrito != null) {
+                    carrito.quitarArticulo(articuloId);
+                }
+            }
+        }
+        return eliminado;
+    }
+
     public Pedido crearPedido(String correoUsuario, Carrito carrito) throws StockInsuficienteException {
+        validarStockCarrito(carrito);
         Pedido pedido = new Pedido(correoUsuario, carrito);
         for (ItemCarrito item : pedido.getItems()) {
             Articulo articuloActual = repositorioArticulos.buscarPorId(item.getArticulo().getId())

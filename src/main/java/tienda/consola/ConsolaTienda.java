@@ -1,16 +1,24 @@
 package tienda.consola;
 
+import tienda.excepciones.CorreoDuplicadoException;
+
 import tienda.excepciones.StockInsuficienteException;
 import tienda.excepciones.TarjetaInvalidaException;
 import tienda.modelo.Articulo;
 import tienda.modelo.Carrito;
 import tienda.modelo.Categoria;
+import tienda.modelo.EstadoPedido;
 import tienda.modelo.ItemCarrito;
 import tienda.modelo.Pago;
 import tienda.modelo.Pedido;
+import tienda.modelo.RegistroUsuario;
+import tienda.modelo.Rol;
 import tienda.persistencia.PersistenciaJson;
 import tienda.persistencia.RepositorioArticulos;
+import tienda.persistencia.RepositorioCarritos;
 import tienda.persistencia.RepositorioPedidos;
+import tienda.persistencia.RepositorioUsuarios;
+import tienda.servicio.ServicioAutenticacion;
 import tienda.servicio.ServicioTienda;
 
 import java.io.IOException;
@@ -24,32 +32,57 @@ public class ConsolaTienda {
 
     private static final Path ARCHIVO_ARTICULOS = Path.of("datos", "articulos.json");
     private static final Path ARCHIVO_PEDIDOS = Path.of("datos", "pedidos.json");
+    private static final Path ARCHIVO_USUARIOS = Path.of("datos", "usuarios.json");
+    private static final Path ARCHIVO_CARRITOS = Path.of("datos", "carritos.json");
 
     private final RepositorioArticulos repoArticulos;
     private final RepositorioPedidos repoPedidos;
+    private final RepositorioUsuarios repoUsuarios;
+    private final RepositorioCarritos repoCarritos;
     private final ServicioTienda servicioTienda;
+    private final ServicioAutenticacion servicioAutenticacion;
     private final PersistenciaJson persistenciaJson;
-    private final Carrito carrito = new Carrito();
+
+    private RegistroUsuario usuarioActual;
+    private boolean esInvitado;
+    private Carrito carritoActual;
     private volatile boolean guardadoEnSalida = false;
 
     public ConsolaTienda(
             RepositorioArticulos repoArticulos,
             RepositorioPedidos repoPedidos,
+            RepositorioUsuarios repoUsuarios,
+            RepositorioCarritos repoCarritos,
             ServicioTienda servicioTienda,
+            ServicioAutenticacion servicioAutenticacion,
             PersistenciaJson persistenciaJson) {
         this.repoArticulos = repoArticulos;
         this.repoPedidos = repoPedidos;
+        this.repoUsuarios = repoUsuarios;
+        this.repoCarritos = repoCarritos;
         this.servicioTienda = servicioTienda;
+        this.servicioAutenticacion = servicioAutenticacion;
         this.persistenciaJson = persistenciaJson;
     }
 
     public static void main(String[] args) {
         RepositorioArticulos repoArticulos = new RepositorioArticulos();
         RepositorioPedidos repoPedidos = new RepositorioPedidos();
+        RepositorioUsuarios repoUsuarios = new RepositorioUsuarios(ARCHIVO_USUARIOS);
+        RepositorioCarritos repoCarritos = new RepositorioCarritos(ARCHIVO_CARRITOS);
         ServicioTienda servicioTienda = new ServicioTienda(repoArticulos, repoPedidos);
+        ServicioAutenticacion servicioAutenticacion = new ServicioAutenticacion(repoUsuarios);
         PersistenciaJson persistenciaJson = new PersistenciaJson();
 
-        ConsolaTienda consola = new ConsolaTienda(repoArticulos, repoPedidos, servicioTienda, persistenciaJson);
+        ConsolaTienda consola = new ConsolaTienda(
+                repoArticulos,
+                repoPedidos,
+                repoUsuarios,
+                repoCarritos,
+                servicioTienda,
+                servicioAutenticacion,
+                persistenciaJson
+        );
         consola.registrarShutdownHook();
         consola.cargarDatosIniciales();
         consola.iniciar();
@@ -58,7 +91,7 @@ public class ConsolaTienda {
     private void registrarShutdownHook() {
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             if (!guardadoEnSalida) {
-                guardarDatosSilencioso("\nCierre detectado. Guardando datos automáticamente...");
+                autoguardarTodo("\nCierre detectado. Guardando datos automáticamente...");
             }
         }, "autoguardado-shutdown-hook"));
     }
@@ -72,120 +105,257 @@ public class ConsolaTienda {
         }
     }
 
+    private void autoguardarTodo(String mensajePrevio) {
+        if (mensajePrevio != null && !mensajePrevio.isBlank()) {
+            System.out.println(mensajePrevio);
+        }
+        try {
+            repoArticulos.guardarEnJson(ARCHIVO_ARTICULOS, persistenciaJson);
+            repoPedidos.guardarEnJson(ARCHIVO_PEDIDOS, persistenciaJson);
+            if (usuarioActual != null && usuarioActual.rol() == Rol.USUARIO_REGISTRADO && carritoActual != null) {
+                repoCarritos.guardarCarritoUsuario(usuarioActual.user(), carritoActual);
+            }
+        } catch (IOException e) {
+            System.out.println("Aviso: no se pudieron autoguardar los datos (" + e.getMessage() + ")");
+        }
+    }
+
     public void iniciar() {
         try (Scanner scanner = new Scanner(System.in)) {
-            boolean ejecutando = true;
-            while (ejecutando) {
-                mostrarMenu();
-                int opcion = leerEntero(scanner, "Elige una opción: ");
-                ejecutando = manejarOpcion(scanner, opcion);
+            boolean salirPrograma = false;
+            while (!salirPrograma) {
+                boolean sesionIniciada = pantallaAcceso(scanner);
+                if (!sesionIniciada) {
+                    autoguardarTodo("Guardando datos antes de salir...");
+                    guardadoEnSalida = true;
+                    System.out.println("¡Hasta luego!");
+                    salirPrograma = true;
+                    break;
+                }
+
+                if (usuarioActual != null && usuarioActual.rol() == Rol.ADMINISTRADOR) {
+                    salirPrograma = bucleMenuAdmin(scanner);
+                } else {
+                    salirPrograma = bucleMenuCliente(scanner);
+                }
+
+                finalizarSesionActual();
+                if (!salirPrograma) {
+                    autoguardarTodo("Sesión cerrada. Datos guardados automáticamente.");
+                }
+            }
+            if (!guardadoEnSalida) {
+                autoguardarTodo("Guardando datos antes de salir...");
+                guardadoEnSalida = true;
+                System.out.println("¡Hasta luego!");
             }
         }
     }
 
-    private void mostrarMenu() {
-        System.out.println("\n=== SIMULADOR TIENDA ===");
-        System.out.println("1. Registrar artículo");
-        System.out.println("2. Listar artículos");
-        System.out.println("3. Agregar artículo al carrito");
-        System.out.println("4. Ver carrito");
-        System.out.println("5. Crear pedido");
-        System.out.println("6. Listar pedidos y pagar");
-        System.out.println("7. Guardar datos en JSON");
-        System.out.println("8. Cargar datos desde JSON");
-        System.out.println("9. Actualizar precio y stock");
-        System.out.println("10. Quitar artículo del carrito");
-        System.out.println("11. Vaciar carrito");
-        System.out.println("12. Buscar artículos por categoría");
-        System.out.println("13. Consultar pedidos por correo");
-        System.out.println("14. Cancelar pedido pendiente");
-        System.out.println("0. Salir (autoguarda datos)");
-    }
+    private boolean pantallaAcceso(Scanner scanner) {
+        while (true) {
+            System.out.println("\n=== TIENDA EN LÍNEA - ACCESO ===");
+            System.out.println("1. Iniciar sesión");
+            System.out.println("2. Registrarse (nueva cuenta de usuario)");
+            System.out.println("3. Continuar como invitado (sin cuenta)");
+            if (repoUsuarios.listarPorRol(Rol.ADMINISTRADOR).isEmpty()) {
+                System.out.println("4. Configurar primera cuenta de Administrador");
+            }
+            System.out.println("0. Salir");
 
-    private boolean manejarOpcion(Scanner scanner, int opcion) {
-        try {
-            return switch (opcion) {
-                case 1 -> {
-                    registrarArticulo(scanner);
-                    yield true;
+            int opcion = leerEntero(scanner, "Elige una opción: ");
+            try {
+                switch (opcion) {
+                    case 1 -> {
+                        String correo = leerTexto(scanner, "Correo: ");
+                        String pass = leerTexto(scanner, "Contraseña: ");
+                        Optional<RegistroUsuario> opt = servicioAutenticacion.autenticar(correo, pass);
+                        if (opt.isEmpty()) {
+                            System.out.println("Credenciales inválidas.");
+                            break;
+                        }
+                        usuarioActual = opt.get();
+                        esInvitado = false;
+                        if (usuarioActual.rol() == Rol.USUARIO_REGISTRADO) {
+                            carritoActual = repoCarritos.cargarCarritoUsuario(usuarioActual.user(), repoArticulos);
+                            System.out.println("Bienvenido, " + usuarioActual.user()
+                                    + " (artículos en carrito guardado: " + carritoActual.getItems().size() + ")");
+                        } else {
+                            carritoActual = new Carrito();
+                            System.out.println("Sesión de ADMINISTRADOR iniciada: " + usuarioActual.user());
+                        }
+                        return true;
+                    }
+                    case 2 -> {
+                        String correo = leerTexto(scanner, "Correo para registrar: ");
+                        String pass = leerTexto(scanner, "Crea una contraseña: ");
+                        RegistroUsuario nuevo = servicioAutenticacion.registrar(correo, pass, Rol.USUARIO_REGISTRADO);
+                        usuarioActual = nuevo;
+                        esInvitado = false;
+                        carritoActual = new Carrito();
+                        autoguardarTodo(null);
+                        System.out.println("Cuenta registrada correctamente. Bienvenido, " + nuevo.user());
+                        return true;
+                    }
+                    case 3 -> {
+                        usuarioActual = null;
+                        esInvitado = true;
+                        carritoActual = new Carrito();
+                        System.out.println("Modo INVITADO activo (tu carrito no se guardará al cerrar la aplicación).");
+                        return true;
+                    }
+                    case 4 -> {
+                        if (!repoUsuarios.listarPorRol(Rol.ADMINISTRADOR).isEmpty()) {
+                            System.out.println("Ya existe al menos un administrador registrado.");
+                            break;
+                        }
+                        String correo = leerTexto(scanner, "Correo del administrador: ");
+                        String pass = leerTexto(scanner, "Contraseña del administrador: ");
+                        RegistroUsuario admin = servicioAutenticacion.registrar(correo, pass, Rol.ADMINISTRADOR);
+                        usuarioActual = admin;
+                        esInvitado = false;
+                        carritoActual = new Carrito();
+                        autoguardarTodo(null);
+                        System.out.println("Administrador creado e iniciado: " + admin.user());
+                        return true;
+                    }
+                    case 0 -> {
+                        return false;
+                    }
+                    default -> System.out.println("Opción no válida.");
                 }
-                case 2 -> {
-                    listarArticulos();
-                    yield true;
-                }
-                case 3 -> {
-                    agregarAlCarrito(scanner);
-                    yield true;
-                }
-                case 4 -> {
-                    verCarrito();
-                    yield true;
-                }
-                case 5 -> {
-                    crearPedido(scanner);
-                    yield true;
-                }
-                case 6 -> {
-                    listarYPagarPedido(scanner);
-                    yield true;
-                }
-                case 7 -> {
-                    guardarEnJson();
-                    yield true;
-                }
-                case 8 -> {
-                    cargarDesdeJson();
-                    yield true;
-                }
-                case 9 -> {
-                    actualizarPrecioYStock(scanner);
-                    yield true;
-                }
-                case 10 -> {
-                    quitarArticuloDelCarrito(scanner);
-                    yield true;
-                }
-                case 11 -> {
-                    vaciarCarrito();
-                    yield true;
-                }
-                case 12 -> {
-                    buscarPorCategoria(scanner);
-                    yield true;
-                }
-                case 13 -> {
-                    consultarPedidosPorCorreo(scanner);
-                    yield true;
-                }
-                case 14 -> {
-                    cancelarPedido(scanner);
-                    yield true;
-                }
-                case 0 -> {
-                    guardarDatosSilencioso("Guardando datos antes de salir...");
-                    guardadoEnSalida = true;
-                    System.out.println("¡Hasta luego!");
-                    yield false;
-                }
-                default -> {
-                    System.out.println("Opción no válida.");
-                    yield true;
-                }
-            };
-        } catch (IllegalArgumentException | IllegalStateException | StockInsuficienteException | TarjetaInvalidaException | IOException e) {
-            System.out.println("Error: " + e.getMessage());
-            return true;
+            } catch (CorreoDuplicadoException | IllegalArgumentException e) {
+                System.out.println("Error: " + e.getMessage());
+            }
         }
     }
 
-    private void guardarDatosSilencioso(String mensajePrevio) {
-        System.out.println(mensajePrevio);
-        try {
-            repoArticulos.guardarEnJson(ARCHIVO_ARTICULOS, persistenciaJson);
-            repoPedidos.guardarEnJson(ARCHIVO_PEDIDOS, persistenciaJson);
-            System.out.println("Autoguardado completado en " + ARCHIVO_ARTICULOS + " y " + ARCHIVO_PEDIDOS);
-        } catch (IOException e) {
-            System.out.println("Aviso: no se pudieron autoguardar los datos (" + e.getMessage() + ")");
+    private void finalizarSesionActual() {
+        if (usuarioActual != null && usuarioActual.rol() == Rol.USUARIO_REGISTRADO && carritoActual != null) {
+            repoCarritos.guardarCarritoUsuario(usuarioActual.user(), carritoActual);
+        }
+        usuarioActual = null;
+        esInvitado = false;
+        carritoActual = null;
+    }
+
+    private boolean bucleMenuCliente(Scanner scanner) {
+        while (true) {
+            String tipoCuenta = esInvitado ? "INVITADO" : "USUARIO REGISTRADO (" + usuarioActual.user() + ")";
+            System.out.println("\n=== TIENDA EN LÍNEA [" + tipoCuenta + "] ===");
+            System.out.println("1. Listar artículos");
+            System.out.println("2. Buscar artículos por categoría");
+            System.out.println("3. Agregar artículo al carrito");
+            System.out.println("4. Ver carrito");
+            System.out.println("5. Quitar artículo del carrito");
+            System.out.println("6. Vaciar carrito");
+            System.out.println("7. Crear pedido");
+            System.out.println("8. Ver mis pedidos y pagar");
+            System.out.println("9. Cancelar pedido pendiente");
+            System.out.println("10. Cerrar sesión");
+            System.out.println("0. Salir de la aplicación");
+
+            int opcion = leerEntero(scanner, "Elige una opción: ");
+            try {
+                switch (opcion) {
+                    case 1 -> listarArticulos();
+                    case 2 -> buscarPorCategoria(scanner);
+                    case 3 -> {
+                        agregarAlCarrito(scanner);
+                        persistirCarritoSiRegistrado();
+                    }
+                    case 4 -> verCarrito();
+                    case 5 -> {
+                        quitarArticuloDelCarrito(scanner);
+                        persistirCarritoSiRegistrado();
+                    }
+                    case 6 -> {
+                        vaciarCarrito();
+                        persistirCarritoSiRegistrado();
+                    }
+                    case 7 -> {
+                        crearPedidoCliente(scanner);
+                        persistirCarritoSiRegistrado();
+                        autoguardarTodo(null);
+                    }
+                    case 8 -> {
+                        verYPagarMisPedidos(scanner);
+                        autoguardarTodo(null);
+                    }
+                    case 9 -> {
+                        cancelarPedidoCliente(scanner);
+                        autoguardarTodo(null);
+                    }
+                    case 10 -> {
+                        return false;
+                    }
+                    case 0 -> {
+                        return true;
+                    }
+                    default -> System.out.println("Opción no válida.");
+                }
+            } catch (IllegalArgumentException | IllegalStateException | StockInsuficienteException | TarjetaInvalidaException e) {
+                System.out.println("Error: " + e.getMessage());
+            }
+        }
+    }
+
+    private boolean bucleMenuAdmin(Scanner scanner) {
+        while (true) {
+            System.out.println("\n=== PANEL DE ADMINISTRADOR [" + usuarioActual.user() + "] ===");
+            System.out.println("1. Registrar artículo");
+            System.out.println("2. Quitar artículo de la tienda");
+            System.out.println("3. Actualizar precio y stock");
+            System.out.println("4. Listar artículos");
+            System.out.println("5. Buscar artículos por categoría");
+            System.out.println("6. Buscar / listar pedidos y pagar");
+            System.out.println("7. Cancelar pedido");
+            System.out.println("8. Consultar artículos en el carrito de un usuario");
+            System.out.println("9. Eliminar usuario (requiere contraseña de admin)");
+            System.out.println("10. Cerrar sesión");
+            System.out.println("0. Salir de la aplicación");
+
+            int opcion = leerEntero(scanner, "Elige una opción: ");
+            try {
+                switch (opcion) {
+                    case 1 -> {
+                        registrarArticulo(scanner);
+                        autoguardarTodo(null);
+                    }
+                    case 2 -> {
+                        quitarArticuloCatalogo(scanner);
+                        autoguardarTodo(null);
+                    }
+                    case 3 -> {
+                        actualizarPrecioYStock(scanner);
+                        autoguardarTodo(null);
+                    }
+                    case 4 -> listarArticulos();
+                    case 5 -> buscarPorCategoria(scanner);
+                    case 6 -> buscarYListarPedidosAdmin(scanner);
+                    case 7 -> {
+                        cancelarPedidoAdmin(scanner);
+                        autoguardarTodo(null);
+                    }
+                    case 8 -> consultarCarritoDeUsuario(scanner);
+                    case 9 -> eliminarUsuarioConPasswordAdmin(scanner);
+                    case 10 -> {
+                        return false;
+                    }
+                    case 0 -> {
+                        return true;
+                    }
+                    default -> System.out.println("Opción no válida.");
+                }
+            } catch (IllegalArgumentException | IllegalStateException | SecurityException | TarjetaInvalidaException e) {
+                System.out.println("Error: " + e.getMessage());
+            }
+        }
+    }
+
+    private void persistirCarritoSiRegistrado() {
+        if (usuarioActual != null && usuarioActual.rol() == Rol.USUARIO_REGISTRADO && carritoActual != null) {
+            repoCarritos.guardarCarritoUsuario(usuarioActual.user(), carritoActual);
         }
     }
 
@@ -199,6 +369,16 @@ public class ConsolaTienda {
         Articulo articulo = new Articulo(id, nombre, categoria, precio, stock);
         repoArticulos.guardar(articulo);
         System.out.println("Artículo guardado: " + articulo.getId() + " - " + articulo.getNombre());
+    }
+
+    private void quitarArticuloCatalogo(Scanner scanner) {
+        listarArticulos();
+        String id = leerTexto(scanner, "ID del artículo a quitar de la tienda: ");
+        if (repoArticulos.buscarPorId(id).isEmpty()) {
+            throw new IllegalArgumentException("No existe un artículo con ID: " + id);
+        }
+        repoArticulos.eliminarPorId(id);
+        System.out.println("Artículo eliminado del catálogo: " + id);
     }
 
     private void listarArticulos() {
@@ -236,67 +416,74 @@ public class ConsolaTienda {
         listarArticulos();
         String id = leerTexto(scanner, "ID del artículo a agregar: ");
         int cantidad = leerEntero(scanner, "Cantidad: ");
-        servicioTienda.agregarAlCarrito(carrito, id, cantidad);
+        servicioTienda.agregarAlCarrito(carritoActual, id, cantidad);
         System.out.println("Agregado al carrito.");
     }
 
     private void verCarrito() {
-        if (carrito.estaVacio()) {
+        if (carritoActual.estaVacio()) {
             System.out.println("El carrito está vacío.");
             return;
         }
         System.out.println("\n--- Carrito ---");
-        for (ItemCarrito item : carrito.getItems().values()) {
+        for (ItemCarrito item : carritoActual.getItems().values()) {
             System.out.printf("- [%s] %s x%d -> Subtotal: $%s%n",
                     item.getArticulo().getId(), item.getArticulo().getNombre(), item.getCantidad(), item.getSubtotal());
         }
-        System.out.println("Total: $" + carrito.calcularTotal());
+        System.out.println("Total: $" + carritoActual.calcularTotal());
     }
 
     private void quitarArticuloDelCarrito(Scanner scanner) {
-        if (carrito.estaVacio()) {
+        if (carritoActual.estaVacio()) {
             System.out.println("El carrito está vacío.");
             return;
         }
         verCarrito();
         String id = leerTexto(scanner, "ID del artículo a quitar: ");
-        if (!carrito.getItems().containsKey(id)) {
+        if (!carritoActual.getItems().containsKey(id)) {
             System.out.println("El artículo con ID '" + id + "' no está en el carrito.");
             return;
         }
-        carrito.quitarArticulo(id);
+        carritoActual.quitarArticulo(id);
         System.out.println("Artículo '" + id + "' eliminado del carrito.");
     }
 
     private void vaciarCarrito() {
-        if (carrito.estaVacio()) {
+        if (carritoActual.estaVacio()) {
             System.out.println("El carrito ya está vacío.");
             return;
         }
-        carrito.vaciar();
+        carritoActual.vaciar();
         System.out.println("Carrito vaciado.");
     }
 
-    private void crearPedido(Scanner scanner) throws StockInsuficienteException {
-        if (carrito.estaVacio()) {
+    private void crearPedidoCliente(Scanner scanner) throws StockInsuficienteException {
+        if (carritoActual.estaVacio()) {
             System.out.println("No puedes crear un pedido con el carrito vacío.");
             return;
         }
-        String correo = leerTexto(scanner, "Correo del usuario: ");
-        Pedido pedido = servicioTienda.crearPedido(correo, carrito);
-        System.out.println("Pedido creado con ID: " + pedido.getId() + " | Total: $" + pedido.getTotal());
+        String correo = esInvitado
+                ? leerTexto(scanner, "Correo para registrar el pedido (invitado): ")
+                : usuarioActual.user();
+        Pedido pedido = servicioTienda.crearPedido(correo, carritoActual);
+        System.out.println("Pedido creado con ID: " + pedido.getId()
+                + " | Total: $" + pedido.getTotal()
+                + " | Comprobante generado en datos/pedidos/pedido-" + pedido.getId() + ".txt");
     }
 
-    private void listarYPagarPedido(Scanner scanner) throws TarjetaInvalidaException {
-        List<Pedido> pedidos = repoPedidos.listarTodos();
+    private void verYPagarMisPedidos(Scanner scanner) throws TarjetaInvalidaException {
+        List<Pedido> pedidos = esInvitado
+                ? repoPedidos.buscarPorUsuario(leerTexto(scanner, "Ingresa tu correo para consultar tus pedidos: "))
+                : repoPedidos.buscarPorUsuario(usuarioActual.user());
+
         if (pedidos.isEmpty()) {
-            System.out.println("No hay pedidos registrados.");
+            System.out.println("No tienes pedidos registrados.");
             return;
         }
-        System.out.println("\n--- Pedidos ---");
+        System.out.println("\n--- Mis pedidos ---");
         for (Pedido p : pedidos) {
-            System.out.printf("ID: %s | Cliente: %s | Total: $%s | Estado: %s%n",
-                    p.getId(), p.getCorreoUsuario(), p.getTotal(), p.getEstado());
+            System.out.printf("ID: %s | Total: $%s | Estado: %s%n",
+                    p.getId(), p.getTotal(), p.getEstado());
         }
 
         String responder = leerTexto(scanner, "¿Deseas pagar algún pedido? (s/n): ");
@@ -309,27 +496,70 @@ public class ConsolaTienda {
         System.out.println("Pago procesado correctamente. ID de pago: " + pago.getId());
     }
 
-    private void consultarPedidosPorCorreo(Scanner scanner) {
-        String correo = leerTexto(scanner, "Correo del usuario: ");
-        List<Pedido> encontrados = repoPedidos.buscarPorUsuario(correo);
-        if (encontrados.isEmpty()) {
-            System.out.println("No se encontraron pedidos para el correo: " + correo);
+    private void cancelarPedidoCliente(Scanner scanner) {
+        List<Pedido> pedidos = esInvitado
+                ? repoPedidos.buscarPorUsuario(leerTexto(scanner, "Ingresa tu correo: "))
+                : repoPedidos.buscarPorUsuario(usuarioActual.user());
+
+        List<Pedido> pendientes = pedidos.stream()
+                .filter(p -> p.getEstado() == EstadoPedido.PENDIENTE)
+                .toList();
+
+        if (pendientes.isEmpty()) {
+            System.out.println("No tienes pedidos pendientes por cancelar.");
             return;
         }
-        System.out.println("\n--- Pedidos de " + correo + " ---");
-        for (Pedido p : encontrados) {
+        System.out.println("\n--- Pedidos pendientes ---");
+        for (Pedido p : pendientes) {
             System.out.printf("ID: %s | Total: $%s | Estado: %s%n",
                     p.getId(), p.getTotal(), p.getEstado());
         }
+        String pedidoId = leerTexto(scanner, "ID del pedido a cancelar: ");
+        servicioTienda.cancelarPedido(pedidoId);
+        System.out.println("Pedido cancelado y stock repuesto: " + pedidoId);
     }
 
-    private void cancelarPedido(Scanner scanner) {
+    private void buscarYListarPedidosAdmin(Scanner scanner) throws TarjetaInvalidaException {
+        System.out.println("1. Listar todos los pedidos");
+        System.out.println("2. Buscar pedidos por correo de usuario");
+        System.out.println("3. Buscar pedido por ID");
+        int filtro = leerEntero(scanner, "Elige una opción: ");
+
+        List<Pedido> pedidos = switch (filtro) {
+            case 2 -> repoPedidos.buscarPorUsuario(leerTexto(scanner, "Correo del usuario: "));
+            case 3 -> {
+                String idBuscado = leerTexto(scanner, "ID del pedido: ");
+                yield repoPedidos.buscarPorId(idBuscado).map(List::of).orElseGet(List::of);
+            }
+            default -> repoPedidos.listarTodos();
+        };
+
+        if (pedidos.isEmpty()) {
+            System.out.println("No se encontraron pedidos con ese criterio.");
+            return;
+        }
+        System.out.println("\n--- Pedidos ---");
+        for (Pedido p : pedidos) {
+            System.out.printf("ID: %s | Cliente: %s | Total: $%s | Estado: %s%n",
+                    p.getId(), p.getCorreoUsuario(), p.getTotal(), p.getEstado());
+        }
+
+        String responder = leerTexto(scanner, "¿Deseas procesar el pago de algún pedido pendiente? (s/n): ");
+        if (responder.equalsIgnoreCase("s")) {
+            String pedidoId = leerTexto(scanner, "ID del pedido: ");
+            String tarjeta = leerTexto(scanner, "Número de tarjeta: ");
+            Pago pago = servicioTienda.procesarPago(pedidoId, tarjeta);
+            autoguardarTodo(null);
+            System.out.println("Pago procesado correctamente. ID de pago: " + pago.getId());
+        }
+    }
+
+    private void cancelarPedidoAdmin(Scanner scanner) {
         List<Pedido> pedidos = repoPedidos.listarTodos();
         if (pedidos.isEmpty()) {
             System.out.println("No hay pedidos registrados.");
             return;
         }
-        System.out.println("\n--- Pedidos ---");
         for (Pedido p : pedidos) {
             System.out.printf("ID: %s | Cliente: %s | Total: $%s | Estado: %s%n",
                     p.getId(), p.getCorreoUsuario(), p.getTotal(), p.getEstado());
@@ -339,16 +569,34 @@ public class ConsolaTienda {
         System.out.println("Pedido cancelado: " + pedidoId);
     }
 
-    private void guardarEnJson() throws IOException {
-        repoArticulos.guardarEnJson(ARCHIVO_ARTICULOS, persistenciaJson);
-        repoPedidos.guardarEnJson(ARCHIVO_PEDIDOS, persistenciaJson);
-        System.out.println("Datos guardados en " + ARCHIVO_ARTICULOS + " y " + ARCHIVO_PEDIDOS);
+    private void consultarCarritoDeUsuario(Scanner scanner) {
+        String correo = leerTexto(scanner, "Correo del usuario registrado: ");
+        List<ItemCarrito> items = repoCarritos.obtenerItemsGuardados(correo);
+        if (items.isEmpty()) {
+            System.out.println("El usuario '" + correo + "' no tiene artículos guardados en su carrito.");
+            return;
+        }
+        System.out.println("\n--- Carrito guardado de " + correo + " ---");
+        BigDecimal total = BigDecimal.ZERO;
+        for (ItemCarrito item : items) {
+            System.out.printf("- [%s] %s x%d -> Subtotal: $%s%n",
+                    item.getArticulo().getId(), item.getArticulo().getNombre(), item.getCantidad(), item.getSubtotal());
+            total = total.add(item.getSubtotal());
+        }
+        System.out.println("Total estimado: $" + total);
     }
 
-    private void cargarDesdeJson() throws IOException {
-        repoArticulos.cargarDesdeJson(ARCHIVO_ARTICULOS, persistenciaJson);
-        repoPedidos.cargarDesdeJson(ARCHIVO_PEDIDOS, persistenciaJson);
-        System.out.println("Datos cargados desde JSON.");
+    private void eliminarUsuarioConPasswordAdmin(Scanner scanner) {
+        String correoObjetivo = leerTexto(scanner, "Correo del usuario a eliminar: ");
+        String passAdmin = leerTexto(scanner, "Confirma tu contraseña de administrador: ");
+        boolean eliminado = servicioAutenticacion.eliminarUsuarioComoAdmin(
+                usuarioActual.user(), passAdmin, correoObjetivo);
+        if (eliminado) {
+            repoCarritos.eliminarCarritoUsuario(correoObjetivo);
+            System.out.println("Usuario eliminado correctamente: " + correoObjetivo);
+        } else {
+            System.out.println("No se encontró ningún usuario con el correo: " + correoObjetivo);
+        }
     }
 
     private void actualizarPrecioYStock(Scanner scanner) {
@@ -360,7 +608,7 @@ public class ConsolaTienda {
         }
 
         BigDecimal nuevoPrecio = leerDecimal(scanner, "Nuevo precio: ");
-        int nuevoStock = leerEntero(scanner, "Nuevo stock: ");
+        int nuevoStock = leerEntero(scanner, "Nuevo stock (0 o mayor): ");
 
         if (nuevoPrecio.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("El precio no puede ser negativo.");
