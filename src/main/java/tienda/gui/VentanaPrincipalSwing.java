@@ -14,16 +14,12 @@ import tienda.modelo.Computadora;
 import tienda.modelo.Frutas;
 import tienda.modelo.Lacteos;
 import tienda.modelo.Laptop;
+import tienda.modelo.Hombre;
 import tienda.modelo.Moda;
-import tienda.modelo.PantalonHombre;
-import tienda.modelo.PantalonMujer;
+import tienda.modelo.Mujer;
 import tienda.modelo.Salchichoneria;
-import tienda.modelo.SueterHombre;
-import tienda.modelo.SueterMujer;
 import tienda.modelo.Tecnologia;
 import tienda.modelo.Television;
-import tienda.modelo.TenisHombre;
-import tienda.modelo.TenisMujer;
 import tienda.modelo.Verduras;
 import tienda.modelo.Moda;
 import tienda.modelo.Tecnologia;
@@ -163,6 +159,9 @@ public class VentanaPrincipalSwing extends JFrame {
     private JSpinner spnAdminStock;
     private DefaultTableModel modeloAdminPedidos;
     private JTable tablaAdminPedidos;
+    private DefaultTableModel modeloAdminUsuarios;
+    private JTable tablaAdminUsuarios;
+    private JTextField txtCorreoEliminarAdmin;
 
     public VentanaPrincipalSwing(
             ServicioAutenticacion servicioAuth,
@@ -479,14 +478,11 @@ tabbedPane.addChangeListener(e -> {
         JButton btnQuitar = new JButton("Quitar seleccionado");
         btnQuitar.addActionListener(e -> quitarItemCarrito());
 
-        JButton btnLimpiarNoStock = new JButton("Quitar sin stock");
-        btnLimpiarNoStock.addActionListener(e -> limpiarArticulosSinStock());
 
         JButton btnPagar = new JButton("Crear Pedido y Pagar");
         btnPagar.addActionListener(e -> flujoCrearPedidoYPagar());
 
         botones.add(btnQuitar);
-        botones.add(btnLimpiarNoStock);
         botones.add(btnPagar);
         inferior.add(botones, BorderLayout.EAST);
 
@@ -574,14 +570,45 @@ tabbedPane.addChangeListener(e -> {
         bottomAdmin.setPreferredSize(new Dimension(0, 180));
         bottomAdmin.setBorder(BorderFactory.createTitledBorder("Todos los Pedidos del Sistema"));
         bottomAdmin.add(new JScrollPane(tablaAdminPedidos), BorderLayout.CENTER);
-JPanel barraAdminUsuarios = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        modeloAdminUsuarios = new DefaultTableModel(
+                new Object[]{"Correo", "Rol"}, 0
+        ) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        tablaAdminUsuarios = new JTable(modeloAdminUsuarios);
+        txtCorreoEliminarAdmin = crearCampoTexto();
+        txtCorreoEliminarAdmin.setColumns(22);
+        tablaAdminUsuarios.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting()) {
+                int fila = tablaAdminUsuarios.getSelectedRow();
+                if (fila >= 0) {
+                    txtCorreoEliminarAdmin.setText(String.valueOf(modeloAdminUsuarios.getValueAt(fila, 0)));
+                }
+            }
+        });
+
+        JPanel panelUsuariosCorreo = new JPanel(new BorderLayout(0, 6));
+        panelUsuariosCorreo.setBorder(BorderFactory.createTitledBorder("Usuarios por Correo"));
+        panelUsuariosCorreo.add(new JScrollPane(tablaAdminUsuarios), BorderLayout.CENTER);
+
+        JPanel barraAdminUsuarios = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        barraAdminUsuarios.add(new JLabel("Correo:"));
+        barraAdminUsuarios.add(txtCorreoEliminarAdmin);
 JButton btnEliminarUsuario = new JButton("Eliminar usuario");
 btnEliminarUsuario.addActionListener(e -> eliminarUsuarioComoAdminSwing());
 barraAdminUsuarios.add(btnEliminarUsuario);
-bottomAdmin.add(barraAdminUsuarios, BorderLayout.SOUTH);
+        panelUsuariosCorreo.add(barraAdminUsuarios, BorderLayout.SOUTH);
+        panelUsuariosCorreo.setPreferredSize(new Dimension(0, 170));
+
+        JPanel surAdmin = new JPanel(new BorderLayout());
+        surAdmin.add(bottomAdmin, BorderLayout.CENTER);
+        surAdmin.add(panelUsuariosCorreo, BorderLayout.SOUTH);
 
         tab.add(topAdmin, BorderLayout.CENTER);
-        tab.add(bottomAdmin, BorderLayout.SOUTH);
+        tab.add(surAdmin, BorderLayout.SOUTH);
         return tab;
     }
 
@@ -950,6 +977,13 @@ private void agregarSeleccionadoAlCarrito() {
                     a.getId(), a.getNombre(), a.getCategoria(), a.getPrecio(), a.getStock()
             });
         }
+        if (modeloAdminUsuarios != null) {
+            modeloAdminUsuarios.setRowCount(0);
+            for (RegistroUsuario u : repoUsuarios.listarTodos()) {
+                modeloAdminUsuarios.addRow(new Object[]{u.user(), u.rol()});
+            }
+        }
+        modeloAdminPedidos.setRowCount(0);
         modeloAdminPedidos.setRowCount(0);
         for (Pedido p : repoPedidos.listarTodos()) {
             modeloAdminPedidos.addRow(new Object[]{
@@ -1013,7 +1047,6 @@ private void agregarSeleccionadoAlCarrito() {
         JTextField txtNombre = new JTextField(18);
         JComboBox<Categoria> cmbCategoria = new JComboBox<>(Categoria.values());
         JComboBox<String> cmbSubtipo = new JComboBox<>();
-        JComboBox<String> cmbGenero = new JComboBox<>(new String[]{"HOMBRE", "MUJER"});
         JTextField txtPrecio = new JTextField(10);
         JSpinner spnStock = new JSpinner(new SpinnerNumberModel(10, 0, 100000, 1));
         JTextField txtExtra1 = new JTextField(LocalDate.now().plusDays(15).toString(), 14);
@@ -1021,7 +1054,6 @@ private void agregarSeleccionadoAlCarrito() {
         JTextField txtExtra3 = new JTextField("4K", 14);
         JCheckBox chkBoolExtra = new JCheckBox("Activo", false);
         JLabel lblSubtipo = new JLabel("Subtipo:");
-        JLabel lblGenero = new JLabel("Género:");
         JLabel lblExtra1 = new JLabel("Caducidad (YYYY-MM-DD):");
         JLabel lblExtra2 = new JLabel("Dato adicional:");
         JLabel lblExtra3 = new JLabel("Resolución:");
@@ -1031,8 +1063,6 @@ private void agregarSeleccionadoAlCarrito() {
             Categoria cat = (Categoria) cmbCategoria.getSelectedItem();
             String sub = (String) cmbSubtipo.getSelectedItem();
             boolean esRopa = (cat == Categoria.ROPA);
-            lblGenero.setVisible(esRopa);
-            cmbGenero.setVisible(esRopa);
 
             if (cat == Categoria.ALIMENTOS) {
                 lblExtra1.setVisible(true);
@@ -1096,9 +1126,7 @@ private void agregarSeleccionadoAlCarrito() {
                 lblExtra1.setVisible(true);
                 txtExtra1.setVisible(true);
                 lblExtra1.setText("Talla:");
-                if ("Tenis".equals(sub)) {
-                    txtExtra1.setText("27");
-                } else if (txtExtra1.getText().isBlank() || txtExtra1.getText().contains("-") || txtExtra1.getText().trim().matches("\\d+")) {
+                if (txtExtra1.getText().isBlank() || txtExtra1.getText().contains("-")) {
                     txtExtra1.setText("M");
                 }
             }
@@ -1119,9 +1147,8 @@ private void agregarSeleccionadoAlCarrito() {
                 cmbSubtipo.addItem("Celular");
                 cmbSubtipo.addItem("Television");
             } else if (cat == Categoria.ROPA) {
-                cmbSubtipo.addItem("Pantalon");
-                cmbSubtipo.addItem("Sueter");
-                cmbSubtipo.addItem("Tenis");
+                cmbSubtipo.addItem("Hombre");
+                cmbSubtipo.addItem("Mujer");
             }
             actualizarCamposDetalle.run();
         };
@@ -1139,8 +1166,6 @@ private void agregarSeleccionadoAlCarrito() {
         form.add(cmbCategoria);
         form.add(lblSubtipo);
         form.add(cmbSubtipo);
-        form.add(lblGenero);
-        form.add(cmbGenero);
         form.add(new JLabel("Precio base:"));
         form.add(txtPrecio);
         form.add(new JLabel("Stock inicial:"));
@@ -1176,7 +1201,6 @@ private void agregarSeleccionadoAlCarrito() {
             String nombre = txtNombre.getText().trim();
             Categoria categoria = (Categoria) cmbCategoria.getSelectedItem();
             String subtipo = (String) cmbSubtipo.getSelectedItem();
-            String genero = (String) cmbGenero.getSelectedItem();
             BigDecimal precio = new BigDecimal(txtPrecio.getText().trim());
             int stock = (Integer) spnStock.getValue();
 
@@ -1212,22 +1236,10 @@ private void agregarSeleccionadoAlCarrito() {
                 }
             } else if (categoria == Categoria.ROPA) {
                 String talla = txtExtra1.getText().trim();
-                boolean esHombre = "HOMBRE".equals(genero);
-                if ("Pantalon".equals(subtipo)) {
-                    nuevo = esHombre
-                            ? new PantalonHombre(id, nombre, precio, stock, talla)
-                            : new PantalonMujer(id, nombre, precio, stock, talla);
-                } else if ("Sueter".equals(subtipo)) {
-                    nuevo = esHombre
-                            ? new SueterHombre(id, nombre, precio, stock, talla)
-                            : new SueterMujer(id, nombre, precio, stock, talla);
-                } else if ("Tenis".equals(subtipo)) {
-                    nuevo = esHombre
-                            ? new TenisHombre(id, nombre, precio, stock, talla)
-                            : new TenisMujer(id, nombre, precio, stock, talla);
-                } else {
-                    nuevo = new Moda(id, nombre, precio, stock, talla);
-                }
+                boolean esHombre = "Hombre".equals(subtipo);
+                nuevo = esHombre
+                        ? new Hombre(id, nombre, precio, stock, talla)
+                        : new Mujer(id, nombre, precio, stock, talla);
             } else {
                 throw new IllegalArgumentException("Categoría no soportada: " + categoria);
             }
@@ -1296,10 +1308,13 @@ private void verificarStockAlAbrirCarrito() {
             JOptionPane.showMessageDialog(this, "Acción exclusiva de administrador.");
             return;
         }
-        String correoObjetivo = JOptionPane.showInputDialog(
-                this,
-                "Correo del usuario registrado a eliminar:"
-        );
+        String correoObjetivo = txtCorreoEliminarAdmin != null ? txtCorreoEliminarAdmin.getText().trim() : "";
+        if (correoObjetivo.isBlank()) {
+            correoObjetivo = JOptionPane.showInputDialog(
+                    this,
+                    "Correo del usuario registrado a eliminar:"
+            );
+        }
         if (correoObjetivo == null || correoObjetivo.isBlank()) {
             return;
         }
