@@ -50,6 +50,6 @@ public class ItemCarrito {
     }
 
     public BigDecimal getSubtotal() {
-        return articulo.getPrecio().multiply(BigDecimal.valueOf(cantidad));
+        return articulo.getPrecioFinal().multiply(BigDecimal.valueOf(cantidad));
     }
 }

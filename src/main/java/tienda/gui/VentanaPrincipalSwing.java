@@ -139,6 +139,7 @@ public class VentanaPrincipalSwing extends JFrame {
     private JLabel lblSesionActiva;
     private JTabbedPane tabbedPane;
     private JComboBox<String> cmbCategoriaFiltro;
+    private JComboBox<String> cmbSubcategoriaFiltro;
     private DefaultTableModel modeloCatalogo;
     private JTable tablaCatalogo;
     private JLabel lblPreviewImagen;
@@ -401,6 +402,11 @@ tabbedPane.addChangeListener(e -> {
         cmbCategoriaFiltro = new JComboBox<>(opciones.toArray(new String[0]));
         cmbCategoriaFiltro.addActionListener(e -> refrescarCatalogo());
         filtroBar.add(cmbCategoriaFiltro);
+        filtroBar.add(new JLabel("Subcategoría:"));
+        cmbSubcategoriaFiltro = new JComboBox<>(new String[]{"TODAS"});
+        cmbSubcategoriaFiltro.addActionListener(e -> refrescarCatalogo());
+        filtroBar.add(cmbSubcategoriaFiltro);
+        actualizarOpcionesSubcategoria();
 
         JButton btnActualizar = new JButton("Refrescar");
         btnActualizar.addActionListener(e -> refrescarTodo());
@@ -409,7 +415,7 @@ tabbedPane.addChangeListener(e -> {
         tab.add(filtroBar, BorderLayout.NORTH);
 
         modeloCatalogo = new DefaultTableModel(
-                new Object[]{"ID", "Nombre", "Categoría", "Precio Final", "Stock"}, 0
+                new Object[]{"ID", "Nombre", "Categoría", "Subcategoría", "Precio Final", "Stock"}, 0
         ) {
             @Override
             public boolean isCellEditable(int row, int column) {
@@ -730,9 +736,45 @@ barraAdminUsuarios.add(btnEliminarUsuario);
         refrescarAdmin();
     }
 
+    private void actualizarOpcionesSubcategoria() {
+        if (cmbSubcategoriaFiltro == null || repoArticulos == null) {
+            return;
+        }
+        String categoriaSel = cmbCategoriaFiltro != null ? (String) cmbCategoriaFiltro.getSelectedItem() : "TODAS";
+        String subActual = (String) cmbSubcategoriaFiltro.getSelectedItem();
+        java.util.Set<String> subs = new java.util.TreeSet<>();
+        List<Articulo> base;
+        if (categoriaSel == null || "TODAS".equals(categoriaSel)) {
+            base = repoArticulos.listarTodos();
+        } else {
+            base = repoArticulos.buscarPorCategoria(Categoria.valueOf(categoriaSel));
+        }
+        for (Articulo a : base) {
+            subs.add(a.getSubcategoria());
+        }
+        java.awt.event.ActionListener[] listeners = cmbSubcategoriaFiltro.getActionListeners();
+        for (java.awt.event.ActionListener l : listeners) {
+            cmbSubcategoriaFiltro.removeActionListener(l);
+        }
+        cmbSubcategoriaFiltro.removeAllItems();
+        cmbSubcategoriaFiltro.addItem("TODAS");
+        for (String s : subs) {
+            cmbSubcategoriaFiltro.addItem(s);
+        }
+        if (subActual != null && subs.contains(subActual)) {
+            cmbSubcategoriaFiltro.setSelectedItem(subActual);
+        } else {
+            cmbSubcategoriaFiltro.setSelectedItem("TODAS");
+        }
+        for (java.awt.event.ActionListener l : listeners) {
+            cmbSubcategoriaFiltro.addActionListener(l);
+        }
+    }
     private void refrescarCatalogo() {
+        actualizarOpcionesSubcategoria();
         modeloCatalogo.setRowCount(0);
         String seleccion = (String) cmbCategoriaFiltro.getSelectedItem();
+        String subSeleccion = cmbSubcategoriaFiltro != null ? (String) cmbSubcategoriaFiltro.getSelectedItem() : "TODAS";
         List<Articulo> lista;
         if (seleccion == null || "TODAS".equals(seleccion)) {
             lista = repoArticulos.listarTodos();
@@ -740,11 +782,19 @@ barraAdminUsuarios.add(btnEliminarUsuario);
             lista = repoArticulos.buscarPorCategoria(Categoria.valueOf(seleccion));
         }
         for (Articulo a : lista) {
+            String subcat = a.getSubcategoria();
+            if (a instanceof Moda moda && moda.getColor() != null && !moda.getColor().isBlank()) {
+                subcat = (subcat != null && !subcat.isBlank() ? subcat + " · " : "") + moda.getColor();
+            }
+            if (subSeleccion != null && !"TODAS".equals(subSeleccion) && !subSeleccion.equals(subcat)) {
+                continue;
+            }
             modeloCatalogo.addRow(new Object[]{
                     a.getId(),
                     a.getNombre(),
                     a.getCategoria(),
-                    a.getPrecioFinal(),
+                    subcat,
+                    a.getPrecioFinal().setScale(2, java.math.RoundingMode.HALF_UP),
                     a.getStock()
             });
         }
@@ -777,7 +827,7 @@ barraAdminUsuarios.add(btnEliminarUsuario);
         lblPreviewImagen.setText(gestorImagenes.textoRespaldoImagen(art.getNombre()));
     }
 
-private void agregarSeleccionadoAlCarrito() {
+    private void agregarSeleccionadoAlCarrito() {
         int fila = tablaCatalogo.getSelectedRow();
         if (fila < 0) {
             JOptionPane.showMessageDialog(this, "Selecciona un artículo del catálogo.");
@@ -789,6 +839,7 @@ private void agregarSeleccionadoAlCarrito() {
             servicioTienda.agregarAlCarrito(carritoActual, id, cantidad);
             guardarCarritoSiAplica();
             refrescarCarrito();
+            JOptionPane.showMessageDialog(this, "Los artículos se han agregado al carrito.");
         } catch (StockInsuficienteException | IllegalArgumentException ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "No se pudo agregar", JOptionPane.WARNING_MESSAGE);
         }
@@ -801,10 +852,10 @@ private void agregarSeleccionadoAlCarrito() {
                     item.getArticulo().getId(),
                     item.getArticulo().getNombre(),
                     item.getCantidad(),
-                    item.getSubtotal()
+                    item.getSubtotal().setScale(2, java.math.RoundingMode.HALF_UP)
             });
         }
-        lblTotalCarrito.setText("Total: $" + carritoActual.calcularTotal());
+        lblTotalCarrito.setText("Total: $" + carritoActual.calcularTotal().setScale(2, java.math.RoundingMode.HALF_UP));
     }
 
     private void quitarItemCarrito() {
@@ -831,12 +882,16 @@ private void agregarSeleccionadoAlCarrito() {
     private void flujoCrearPedidoYPagar() {
         if (carritoActual.estaVacio()) {
             JOptionPane.showMessageDialog(this, "El carrito está vacío.");
+            refrescarTodo();
             return;
         }
+        List<ItemCarrito> respaldoItems = new ArrayList<ItemCarrito>(carritoActual.getItems().values());
         String correoPedido = (!esInvitado && usuarioActual != null) ? usuarioActual.user() : "invitado@local";
+        Pedido pedidoCreado = null;
         try {
             servicioTienda.validarStockCarrito(carritoActual);
             Pedido pedido = servicioTienda.crearPedido(correoPedido, carritoActual);
+            pedidoCreado = pedido;
             guardarCarritoSiAplica();
 
             String[] metodos = {"Tarjeta", "Transferencia", "Wallet"};
@@ -850,6 +905,7 @@ private void agregarSeleccionadoAlCarrito() {
                     metodos[0]
             );
             if (metodo == null) {
+                revertirPedidoYCarrito(pedido, respaldoItems);
                 refrescarTodo();
                 persistirEstadoSilencioso();
                 return;
@@ -863,13 +919,38 @@ private void agregarSeleccionadoAlCarrito() {
                         this,
                         "Pago aprobado. Comprobante guardado en:\n" + archivoComprobante
                 );
+            } else {
+                revertirPedidoYCarrito(pedido, respaldoItems);
             }
             refrescarTodo();
             persistirEstadoSilencioso();
         } catch (StockInsuficienteException | TarjetaInvalidaException | IllegalArgumentException | IOException ex) {
+            if (pedidoCreado != null) {
+                revertirPedidoYCarrito(pedidoCreado, respaldoItems);
+            }
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Error en pedido o pago", JOptionPane.ERROR_MESSAGE);
             refrescarTodo();
+            persistirEstadoSilencioso();
         }
+    }
+
+    private void revertirPedidoYCarrito(Pedido pedido, List<ItemCarrito> respaldoItems) {
+        if (pedido != null && pedido.getEstado() == EstadoPedido.PENDIENTE) {
+            try {
+                servicioTienda.cancelarPedido(pedido.getId());
+            } catch (Exception ignored) {
+            }
+        }
+        carritoActual.vaciar();
+        for (ItemCarrito item : respaldoItems) {
+            if (item == null || item.getArticulo() == null) continue;
+            Articulo artVigente = repoArticulos.buscarPorId(item.getArticulo().getId()).orElse(item.getArticulo());
+            try {
+                carritoActual.agregarArticulo(artVigente, item.getCantidad());
+            } catch (StockInsuficienteException ignored) {
+            }
+        }
+        guardarCarritoSiAplica();
     }
 
     private boolean procesarMetodoPagoSwing(Pedido pedido, String metodo) throws TarjetaInvalidaException {
@@ -879,13 +960,28 @@ private void agregarSeleccionadoAlCarrito() {
                 if (numero == null) {
                     yield false;
                 }
+                String limpio = numero.replaceAll("[\\s-]", "");
+                if (!limpio.matches("\\d{15,16}")) {
+                    throw new TarjetaInvalidaException("El número de tarjeta debe tener exactamente 15 o 16 dígitos numéricos.");
+                }
                 String mesStr = JOptionPane.showInputDialog(this, "Mes de vencimiento (1-12):");
                 String anioStr = JOptionPane.showInputDialog(this, "Año de vencimiento (ej. 2028):");
                 if (mesStr == null || anioStr == null) {
                     yield false;
                 }
-                YearMonth ym = YearMonth.of(Integer.parseInt(anioStr.trim()), Integer.parseInt(mesStr.trim()));
-                PagoTarjeta tarjeta = new PagoTarjeta(numero, ym);
+                int mes;
+                int anio;
+                try {
+                    mes = Integer.parseInt(mesStr.trim());
+                    anio = Integer.parseInt(anioStr.trim());
+                } catch (NumberFormatException ex) {
+                    throw new TarjetaInvalidaException("El mes y el año de vencimiento deben ser números válidos.");
+                }
+                if (mes < 1 || mes > 12) {
+                    throw new TarjetaInvalidaException("Mes de vencimiento inválido (" + mes + "). Debe estar entre 1 y 12.");
+                }
+                YearMonth ym = YearMonth.of(anio, mes);
+                PagoTarjeta tarjeta = new PagoTarjeta(limpio, ym);
                 if (!tarjeta.procesar(pedido.getTotal())) {
                     throw new TarjetaInvalidaException("No se pudo procesar el pago con tarjeta.");
                 }
@@ -917,7 +1013,6 @@ private void agregarSeleccionadoAlCarrito() {
             default -> false;
         };
     }
-
     private String correoActualSafe() {
         return (!esInvitado && usuarioActual != null) ? usuarioActual.user() : "invitado@local";
     }
@@ -1119,8 +1214,6 @@ private void agregarSeleccionadoAlCarrito() {
             } else if (cat == Categoria.ROPA) {
                 lblBoolExtra.setVisible(false);
                 chkBoolExtra.setVisible(false);
-                lblExtra2.setVisible(false);
-                txtExtra2.setVisible(false);
                 lblExtra3.setVisible(false);
                 txtExtra3.setVisible(false);
                 lblExtra1.setVisible(true);
@@ -1128,6 +1221,13 @@ private void agregarSeleccionadoAlCarrito() {
                 lblExtra1.setText("Talla:");
                 if (txtExtra1.getText().isBlank() || txtExtra1.getText().contains("-")) {
                     txtExtra1.setText("M");
+                }
+                lblExtra2.setVisible(true);
+                txtExtra2.setVisible(true);
+                lblExtra2.setText("Color:");
+                String actualColor = txtExtra2.getText().trim();
+                if (actualColor.isBlank() || actualColor.matches("\\d+") || actualColor.equalsIgnoreCase("Intel Core i7")) {
+                    txtExtra2.setText("Negro");
                 }
             }
         };
@@ -1150,7 +1250,6 @@ private void agregarSeleccionadoAlCarrito() {
                 cmbSubtipo.addItem("Hombre");
                 cmbSubtipo.addItem("Mujer");
             }
-            actualizarCamposDetalle.run();
         };
 
         cmbCategoria.addActionListener(e -> poblarSubtipos.run());
@@ -1236,14 +1335,19 @@ private void agregarSeleccionadoAlCarrito() {
                 }
             } else if (categoria == Categoria.ROPA) {
                 String talla = txtExtra1.getText().trim();
+                String color = txtExtra2.getText().trim();
+                if (color.isBlank()) {
+                    color = "Sin especificar";
+                }
                 boolean esHombre = "Hombre".equals(subtipo);
                 nuevo = esHombre
-                        ? new Hombre(id, nombre, precio, stock, talla)
-                        : new Mujer(id, nombre, precio, stock, talla);
+                        ? new Hombre(id, nombre, precio, stock, talla, color)
+                        : new Mujer(id, nombre, precio, stock, talla, color);
             } else {
                 throw new IllegalArgumentException("Categoría no soportada: " + categoria);
             }
 
+            nuevo.setSubcategoria(subtipo);
             repoArticulos.guardar(nuevo);
             refrescarTodo();
             persistirEstadoSilencioso();
@@ -1266,7 +1370,12 @@ private void agregarSeleccionadoAlCarrito() {
 
     private void persistirEstadoSilencioso() {
         try {
-            repoArticulos.guardarEnJson(Configuracion.ARCHIVO_CATALOGO, persistencia);
+            Path rutaCatalogo = Configuracion.ARCHIVO_CATALOGO;
+            repoArticulos.guardarEnJson(rutaCatalogo, persistencia);
+            if (rutaCatalogo != null && Files.exists(rutaCatalogo)) {
+                ultimaMarcaCatalogo = Files.getLastModifiedTime(rutaCatalogo).toMillis();
+                ultimoTamCatalogo = Files.size(rutaCatalogo);
+            }
             repoPedidos.guardarEnJson(Configuracion.ARCHIVO_PEDIDOS, persistencia);
             guardarCarritoSiAplica();
         } catch (IOException ignored) {

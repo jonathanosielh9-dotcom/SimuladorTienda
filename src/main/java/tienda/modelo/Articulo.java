@@ -4,10 +4,29 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import tienda.excepciones.StockInsuficienteException;
+import com.fasterxml.jackson.annotation.JsonSubTypes;
+import com.fasterxml.jackson.annotation.JsonTypeInfo;
 
 import java.math.BigDecimal;
 import java.util.Objects;
 
+@JsonTypeInfo(use = JsonTypeInfo.Id.NAME, include = JsonTypeInfo.As.PROPERTY, property = "tipo", defaultImpl = Articulo.class)
+@JsonSubTypes({
+    @JsonSubTypes.Type(value = Tecnologia.class, name = "TECNOLOGIA"),
+    @JsonSubTypes.Type(value = Celular.class, name = "CELULAR"),
+    @JsonSubTypes.Type(value = Computadora.class, name = "COMPUTADORA"),
+    @JsonSubTypes.Type(value = Laptop.class, name = "LAPTOP"),
+    @JsonSubTypes.Type(value = Television.class, name = "TELEVISION"),
+    @JsonSubTypes.Type(value = Moda.class, name = "MODA"),
+    @JsonSubTypes.Type(value = Hombre.class, name = "HOMBRE"),
+    @JsonSubTypes.Type(value = Mujer.class, name = "MUJER"),
+    @JsonSubTypes.Type(value = Alimento.class, name = "ALIMENTO"),
+    @JsonSubTypes.Type(value = Abarrotes.class, name = "ABARROTES"),
+    @JsonSubTypes.Type(value = Frutas.class, name = "FRUTAS"),
+    @JsonSubTypes.Type(value = Lacteos.class, name = "LACTEOS"),
+    @JsonSubTypes.Type(value = Salchichoneria.class, name = "SALCHICHONERIA"),
+    @JsonSubTypes.Type(value = Verduras.class, name = "VERDURAS")
+})
 public class Articulo {
 
     private final String id;
@@ -15,6 +34,7 @@ public class Articulo {
     private Categoria categoria;
     private BigDecimal precio;
     private int stock;
+    private String subcategoria;
 
     @JsonCreator
     public Articulo(
@@ -70,6 +90,19 @@ public class Articulo {
             throw new IllegalArgumentException("El precio no puede ser negativo ni nulo");
         }
         this.precio = precio;
+    }
+
+    public String getSubcategoria() {
+        if (subcategoria != null && !subcategoria.isBlank()) {
+            return subcategoria;
+        }
+        return getClass().getSimpleName();
+    }
+
+    public void setSubcategoria(String subcategoria) {
+        if (subcategoria != null && !subcategoria.isBlank()) {
+            this.subcategoria = subcategoria.trim();
+        }
     }
 
     public int getStock() {

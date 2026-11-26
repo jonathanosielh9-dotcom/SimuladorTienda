@@ -1,12 +1,22 @@
 package tienda.modelo;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.math.BigDecimal;
 
 public class Computadora extends Tecnologia {
 
     private String procesador;
 
-    public Computadora(String id, String nombre, BigDecimal precio, int stock, int garantiaMeses, String procesador) {
+    @JsonCreator
+    public Computadora(
+            @JsonProperty("id") String id,
+            @JsonProperty("nombre") String nombre,
+            @JsonProperty("precio") BigDecimal precio,
+            @JsonProperty("stock") int stock,
+            @JsonProperty("garantiaMeses") int garantiaMeses,
+            @JsonProperty("procesador") String procesador) {
         super(id, nombre, precio, stock, garantiaMeses);
         setProcesador(procesador);
     }

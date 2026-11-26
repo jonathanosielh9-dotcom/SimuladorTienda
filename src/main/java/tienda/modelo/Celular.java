@@ -1,12 +1,22 @@
 package tienda.modelo;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.math.BigDecimal;
 
 public class Celular extends Tecnologia {
 
     private int almacenamientoGb;
 
-    public Celular(String id, String nombre, BigDecimal precio, int stock, int garantiaMeses, int almacenamientoGb) {
+    @JsonCreator
+    public Celular(
+            @JsonProperty("id") String id,
+            @JsonProperty("nombre") String nombre,
+            @JsonProperty("precio") BigDecimal precio,
+            @JsonProperty("stock") int stock,
+            @JsonProperty("garantiaMeses") int garantiaMeses,
+            @JsonProperty("almacenamientoGb") int almacenamientoGb) {
         super(id, nombre, precio, stock, garantiaMeses);
         setAlmacenamientoGb(almacenamientoGb);
     }

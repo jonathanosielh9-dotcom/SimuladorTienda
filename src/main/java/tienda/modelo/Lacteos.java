@@ -1,5 +1,8 @@
 package tienda.modelo;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
@@ -7,7 +10,14 @@ public class Lacteos extends Alimento {
 
     private boolean deslactosado;
 
-    public Lacteos(String id, String nombre, BigDecimal precio, int stock, LocalDate fechaCaducidad, boolean deslactosado) {
+    @JsonCreator
+    public Lacteos(
+            @JsonProperty("id") String id,
+            @JsonProperty("nombre") String nombre,
+            @JsonProperty("precio") BigDecimal precio,
+            @JsonProperty("stock") int stock,
+            @JsonProperty("fechaCaducidad") LocalDate fechaCaducidad,
+            @JsonProperty("deslactosado") boolean deslactosado) {
         super(id, nombre, precio, stock, fechaCaducidad);
         this.deslactosado = deslactosado;
     }

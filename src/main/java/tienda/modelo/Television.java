@@ -1,5 +1,8 @@
 package tienda.modelo;
 
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.math.BigDecimal;
 
 public class Television extends Tecnologia {
@@ -7,14 +10,15 @@ public class Television extends Tecnologia {
     private int pulgadas;
     private String resolucion;
 
+    @JsonCreator
     public Television(
-            String id,
-            String nombre,
-            BigDecimal precio,
-            int stock,
-            int garantiaMeses,
-            int pulgadas,
-            String resolucion) {
+            @JsonProperty("id") String id,
+            @JsonProperty("nombre") String nombre,
+            @JsonProperty("precio") BigDecimal precio,
+            @JsonProperty("stock") int stock,
+            @JsonProperty("garantiaMeses") int garantiaMeses,
+            @JsonProperty("pulgadas") int pulgadas,
+            @JsonProperty("resolucion") String resolucion) {
         super(id, nombre, precio, stock, garantiaMeses);
         setPulgadas(pulgadas);
         setResolucion(resolucion);

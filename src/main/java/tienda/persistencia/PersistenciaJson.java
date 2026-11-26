@@ -3,8 +3,11 @@ package tienda.persistencia;
 import tienda.modelo.Articulo;
 import tienda.modelo.Pedido;
 import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.DefaultTyping;
 import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -18,9 +21,21 @@ public class PersistenciaJson {
     private final JsonMapper mapper;
 
     public PersistenciaJson() {
+        PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("tienda.modelo.")
+                .allowIfSubType("java.util.")
+                .allowIfSubType("java.math.")
+                .allowIfSubType("java.time.")
+                .build();
+
         this.mapper = JsonMapper.builder()
                 .enable(SerializationFeature.INDENT_OUTPUT)
+                .activateDefaultTypingAsProperty(ptv, DefaultTyping.NON_FINAL, "tipo")
                 .build();
+    }
+
+    public JsonMapper getMapper() {
+        return mapper;
     }
 
     public void guardarArticulos(Path archivo, List<Articulo> articulos) throws IOException {

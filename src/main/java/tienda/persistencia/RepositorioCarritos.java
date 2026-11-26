@@ -6,8 +6,11 @@ import tienda.modelo.Carrito;
 import tienda.modelo.ItemCarrito;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
+import tools.jackson.databind.DefaultTyping;
 import tools.jackson.databind.SerializationFeature;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.jsontype.BasicPolymorphicTypeValidator;
+import tools.jackson.databind.jsontype.PolymorphicTypeValidator;
 
 import java.io.IOException;
 import java.nio.file.Files;
@@ -31,8 +34,16 @@ public class RepositorioCarritos {
 
     public RepositorioCarritos(Path archivo) {
         this.archivo = Objects.requireNonNull(archivo, "La ruta del archivo de carritos no puede ser nula");
+        PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
+                .allowIfSubType("tienda.modelo.")
+                .allowIfSubType("java.util.")
+                .allowIfSubType("java.math.")
+                .allowIfSubType("java.time.")
+                .build();
+
         this.mapper = JsonMapper.builder()
                 .enable(SerializationFeature.INDENT_OUTPUT)
+                .activateDefaultTypingAsProperty(ptv, DefaultTyping.NON_FINAL, "tipo")
                 .build();
         cargarInicial();
     }
