@@ -69,6 +69,13 @@ import javax.swing.SpinnerNumberModel;
 import javax.swing.SwingConstants;
 import javax.swing.table.DefaultTableModel;
 import java.awt.BorderLayout;
+import java.awt.Color;
+import java.awt.Component;
+import java.awt.Cursor;
+import java.awt.Font;
+import java.awt.GradientPaint;
+import java.awt.Graphics;
+import java.awt.Graphics2D;
 import java.awt.CardLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
@@ -77,6 +84,7 @@ import java.awt.Image;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -85,6 +93,23 @@ import java.util.Objects;
 import java.util.Optional;
 
 public class VentanaPrincipalSwing extends JFrame {
+
+    private static final Color COLOR_FONDO = new Color(240, 249, 255);
+    private static final Color COLOR_PASTEL_DENSO = new Color(125, 211, 252);
+    private static final Color COLOR_PASTEL_CLARO = new Color(240, 249, 255);
+    private static final Color COLOR_PANEL_SUAVE = new Color(248, 250, 252);
+    private static final Color COLOR_AZUL_MARINO = new Color(15, 41, 74);
+    private static final Color COLOR_AZUL_CIELO = new Color(125, 211, 252);
+    private static final Color COLOR_AZUL_CIELO_HOVER = new Color(56, 189, 248);
+    private static final Color COLOR_SELECCION = new Color(186, 230, 253);
+
+    private static final Font FUENTE_TITULO = new Font("Segoe UI", Font.BOLD, 22);
+    private static final Font FUENTE_SUBTITULO = new Font("Segoe UI", Font.BOLD, 14);
+    private static final Font FUENTE_NORMAL = new Font("Segoe UI", Font.PLAIN, 13);
+    private static final Font FUENTE_NEGRITA = new Font("Segoe UI", Font.BOLD, 13);
+
+    private static final String VISTA_INICIO = "INICIO";
+    private static final String VISTA_REGISTRO = "REGISTRO";
 
     private static final String VISTA_ACCESO = "ACCESO";
     private static final String VISTA_TIENDA = "TIENDA";
@@ -157,6 +182,9 @@ public class VentanaPrincipalSwing extends JFrame {
         this.repoPedidos = Objects.requireNonNull(repoPedidos);
         this.repoCarritos = Objects.requireNonNull(repoCarritos);
         this.persistencia = Objects.requireNonNull(persistencia);
+
+        javax.swing.Timer timerSync = new javax.swing.Timer(2000, ev -> sincronizarCatalogoDesdeDisco());
+        timerSync.start();
         this.gestorImagenes = Objects.requireNonNull(gestorImagenes);
         this.generadorComprobantes = Objects.requireNonNull(generadorComprobantes);
 
@@ -166,70 +194,161 @@ public class VentanaPrincipalSwing extends JFrame {
         setLocationRelativeTo(null);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 
+        rootPanel.add(construirPanelInicio(), VISTA_INICIO);
         rootPanel.add(construirPanelAcceso(), VISTA_ACCESO);
+        rootPanel.add(construirPanelRegistro(), VISTA_REGISTRO);
         rootPanel.add(construirPanelTienda(), VISTA_TIENDA);
         setContentPane(rootPanel);
 
-        rootLayout.show(rootPanel, VISTA_ACCESO);
+        rootLayout.show(rootPanel, VISTA_INICIO);
+        aplicarEstiloBase();
     }
+    private JPanel construirPanelInicio() {
+        JPanel contenedor = new JPanel(new BorderLayout(20, 20)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setPaint(new GradientPaint(0, 0, COLOR_PASTEL_DENSO, 0, getHeight(), COLOR_PASTEL_CLARO));
+                g2.fillRect(0, 0, getWidth(), getHeight());
+                g2.dispose();
+            }
+        };
+        contenedor.setOpaque(false);
+        contenedor.setBorder(BorderFactory.createEmptyBorder(36, 40, 36, 40));
 
-    private JPanel construirPanelAcceso() {
-        JPanel contenedor = new JPanel(new BorderLayout(16, 16));
-        contenedor.setBorder(BorderFactory.createEmptyBorder(24, 24, 24, 24));
+        JPanel centro = new JPanel();
+        centro.setLayout(new BoxLayout(centro, BoxLayout.Y_AXIS));
+        centro.setOpaque(false);
 
-        JLabel titulo = new JLabel("Simulador de Tienda - Acceso", SwingConstants.CENTER);
-        titulo.putClientProperty("JComponent.outline", null);
-        contenedor.add(titulo, BorderLayout.NORTH);
+        JLabel lblMarca = new JLabel("Simulador Tienda", SwingConstants.CENTER);
+        lblMarca.setFont(new Font("Georgia", Font.BOLD | Font.ITALIC, 34));
+        lblMarca.setForeground(COLOR_AZUL_MARINO);
+        lblMarca.setAlignmentX(Component.CENTER_ALIGNMENT);
 
-        JPanel grid = new JPanel(new GridLayout(1, 2, 20, 0));
+        JButton btnIniciar = crearBotonAzul("Iniciar sesión", true);
+        btnIniciar.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btnIniciar.setMaximumSize(new Dimension(260, 44));
+        btnIniciar.setPreferredSize(new Dimension(240, 42));
+        btnIniciar.addActionListener(e -> rootLayout.show(rootPanel, VISTA_ACCESO));
 
-        // Login + Invitado
-        JPanel panelLogin = new JPanel();
-        panelLogin.setLayout(new BoxLayout(panelLogin, BoxLayout.Y_AXIS));
-        panelLogin.setBorder(BorderFactory.createTitledBorder("Iniciar Sesión"));
-
-        txtLoginCorreo = new JTextField();
-        txtLoginPass = new JPasswordField();
-        JButton btnLogin = new JButton("Entrar");
-        btnLogin.addActionListener(e -> intentarLogin());
-
-        JButton btnInvitado = new JButton("Continuar como Invitado");
+        JButton btnInvitado = crearBotonAzul("Continuar como invitado", false);
+        btnInvitado.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btnInvitado.setMaximumSize(new Dimension(260, 44));
+        btnInvitado.setPreferredSize(new Dimension(240, 42));
         btnInvitado.addActionListener(e -> entrarComoInvitado());
 
-        panelLogin.add(new JLabel("Correo:"));
-        panelLogin.add(txtLoginCorreo);
-        panelLogin.add(Box.createVerticalStrut(10));
-        panelLogin.add(new JLabel("Contraseña:"));
-        panelLogin.add(txtLoginPass);
-        panelLogin.add(Box.createVerticalStrut(14));
-        panelLogin.add(btnLogin);
-        panelLogin.add(Box.createVerticalStrut(10));
-        panelLogin.add(btnInvitado);
+        JButton btnCrear = crearBotonAzul("Crear cuenta", true);
+        btnCrear.setAlignmentX(Component.CENTER_ALIGNMENT);
+        btnCrear.setMaximumSize(new Dimension(260, 44));
+        btnCrear.setPreferredSize(new Dimension(240, 42));
+        btnCrear.addActionListener(e -> rootLayout.show(rootPanel, VISTA_REGISTRO));
 
-        // Registro
-        JPanel panelRegistro = new JPanel();
-        panelRegistro.setLayout(new BoxLayout(panelRegistro, BoxLayout.Y_AXIS));
-        panelRegistro.setBorder(BorderFactory.createTitledBorder("Crear Cuenta Nueva"));
+        centro.add(Box.createVerticalGlue());
+        centro.add(lblMarca);
+        centro.add(Box.createVerticalStrut(28));
+        centro.add(btnIniciar);
+        centro.add(Box.createVerticalStrut(14));
+        centro.add(btnInvitado);
+        centro.add(Box.createVerticalStrut(14));
+        centro.add(btnCrear);
+        centro.add(Box.createVerticalGlue());
 
-        txtRegCorreo = new JTextField();
-        txtRegPass = new JPasswordField();
-        JButton btnRegistrar = new JButton("Registrar y Entrar");
-        btnRegistrar.addActionListener(e -> intentarRegistro());
-
-        panelRegistro.add(new JLabel("Correo:"));
-        panelRegistro.add(txtRegCorreo);
-        panelRegistro.add(Box.createVerticalStrut(10));
-        panelRegistro.add(new JLabel("Contraseña (mín. 4 caracteres):"));
-        panelRegistro.add(txtRegPass);
-        panelRegistro.add(Box.createVerticalStrut(14));
-        panelRegistro.add(btnRegistrar);
-
-        grid.add(panelLogin);
-        grid.add(panelRegistro);
-        contenedor.add(grid, BorderLayout.CENTER);
-
+        contenedor.add(centro, BorderLayout.CENTER);
         return contenedor;
     }
+
+
+    private JPanel construirPanelAcceso() {
+        JPanel contenedor = new JPanel(new BorderLayout(20, 20)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setPaint(new GradientPaint(0, 0, COLOR_PASTEL_DENSO, 0, getHeight(), COLOR_PASTEL_CLARO));
+                g2.fillRect(0, 0, getWidth(), getHeight());
+                g2.dispose();
+            }
+        };
+        contenedor.setOpaque(false);
+        contenedor.setBorder(BorderFactory.createEmptyBorder(28, 36, 28, 36));
+
+        JPanel panelLogin = crearTarjeta("Iniciar Sesión");
+        txtLoginCorreo = crearCampoTexto();
+        txtLoginPass = crearCampoPassword();
+        JButton btnLogin = crearBotonAzul("Entrar", true);
+        btnLogin.setAlignmentX(Component.LEFT_ALIGNMENT);
+        btnLogin.addActionListener(e -> intentarLogin());
+
+        JButton btnVolver = crearBotonAzul("Volver", false);
+        btnVolver.setAlignmentX(Component.LEFT_ALIGNMENT);
+        btnVolver.addActionListener(e -> rootLayout.show(rootPanel, VISTA_INICIO));
+
+        panelLogin.add(crearEtiqueta("Correo electrónico:"));
+        panelLogin.add(Box.createVerticalStrut(4));
+        panelLogin.add(txtLoginCorreo);
+        panelLogin.add(Box.createVerticalStrut(12));
+        panelLogin.add(crearEtiqueta("Contraseña:"));
+        panelLogin.add(Box.createVerticalStrut(4));
+        panelLogin.add(txtLoginPass);
+        panelLogin.add(Box.createVerticalStrut(18));
+        panelLogin.add(btnLogin);
+        panelLogin.add(Box.createVerticalStrut(10));
+        panelLogin.add(btnVolver);
+
+        JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 20));
+        wrapper.setOpaque(false);
+        panelLogin.setPreferredSize(new Dimension(380, 310));
+        wrapper.add(panelLogin);
+        contenedor.add(wrapper, BorderLayout.CENTER);
+        return contenedor;
+    }
+
+    private JPanel construirPanelRegistro() {
+        JPanel contenedor = new JPanel(new BorderLayout(20, 20)) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setPaint(new GradientPaint(0, 0, COLOR_PASTEL_DENSO, 0, getHeight(), COLOR_PASTEL_CLARO));
+                g2.fillRect(0, 0, getWidth(), getHeight());
+                g2.dispose();
+            }
+        };
+        contenedor.setOpaque(false);
+        contenedor.setBorder(BorderFactory.createEmptyBorder(28, 36, 28, 36));
+
+        JPanel panelRegistro = crearTarjeta("Crear Cuenta Nueva");
+        txtRegCorreo = crearCampoTexto();
+        txtRegPass = crearCampoPassword();
+        JButton btnRegistrar = crearBotonAzul("Registrar y Entrar", true);
+        btnRegistrar.setAlignmentX(Component.LEFT_ALIGNMENT);
+        btnRegistrar.addActionListener(e -> intentarRegistro());
+
+        JButton btnVolver = crearBotonAzul("Volver", false);
+        btnVolver.setAlignmentX(Component.LEFT_ALIGNMENT);
+        btnVolver.addActionListener(e -> rootLayout.show(rootPanel, VISTA_INICIO));
+
+        panelRegistro.add(crearEtiqueta("Correo electrónico:"));
+        panelRegistro.add(Box.createVerticalStrut(4));
+        panelRegistro.add(txtRegCorreo);
+        panelRegistro.add(Box.createVerticalStrut(12));
+        panelRegistro.add(crearEtiqueta("Contraseña (mín. 4 caracteres):"));
+        panelRegistro.add(Box.createVerticalStrut(4));
+        panelRegistro.add(txtRegPass);
+        panelRegistro.add(Box.createVerticalStrut(18));
+        panelRegistro.add(btnRegistrar);
+        panelRegistro.add(Box.createVerticalStrut(10));
+        panelRegistro.add(btnVolver);
+
+        JPanel wrapper = new JPanel(new FlowLayout(FlowLayout.CENTER, 0, 20));
+        wrapper.setOpaque(false);
+        panelRegistro.setPreferredSize(new Dimension(380, 310));
+        wrapper.add(panelRegistro);
+        contenedor.add(wrapper, BorderLayout.CENTER);
+        return contenedor;
+    }
+
 
     private JPanel construirPanelTienda() {
         JPanel panel = new JPanel(new BorderLayout(8, 8));
@@ -500,10 +619,27 @@ bottomAdmin.add(barraAdminUsuarios, BorderLayout.SOUTH);
     private void activarSesionUsuario(RegistroUsuario usuario) {
         this.usuarioActual = usuario;
         this.esInvitado = false;
+        java.util.List<ItemCarrito> previos = new java.util.ArrayList<>(repoCarritos.obtenerItemsGuardados(usuario.user()));
         this.carritoActual = repoCarritos.cargarCarritoUsuario(usuario.user(), repoArticulos);
+        java.util.List<ItemCarrito> noDisponiblesAlEntrar = new java.util.ArrayList<>();
+        for (ItemCarrito item : previos) {
+            if (item == null || item.getArticulo() == null) continue;
+            String idArt = item.getArticulo().getId();
+            var artOpt = repoArticulos.buscarPorId(idArt);
+            if (artOpt.isEmpty() || artOpt.get().getStock() <= 0 || artOpt.get().getStock() < item.getCantidad()) {
+                noDisponiblesAlEntrar.add(item);
+            }
+        }
         actualizarVisibilidadTabs();
         refrescarTodo();
         rootLayout.show(rootPanel, VISTA_TIENDA);
+        if (!noDisponiblesAlEntrar.isEmpty()) {
+            notificarYQuitarArticulosNoDisponibles(
+                    noDisponiblesAlEntrar,
+                    "Los siguientes art\u00edculos de tu carrito ya no est\u00e1n disponibles:"
+            );
+            repoCarritos.guardarCarritoUsuario(usuario.user(), carritoActual);
+        }
     }
 
     private void cerrarSesion() {
@@ -832,6 +968,13 @@ private void agregarSeleccionadoAlCarrito() {
             BigDecimal nuevoPrecio = new BigDecimal(txtAdminPrecio.getText().trim());
             int nuevoStock = (Integer) spnAdminStock.getValue();
             repoArticulos.actualizarPrecioYStock(id, nuevoPrecio, nuevoStock);
+            ItemCarrito itemEnCarrito = carritoActual.getItems().get(id);
+            if (itemEnCarrito != null && nuevoStock <= 0) {
+                notificarYQuitarArticulosNoDisponibles(
+                        List.of(itemEnCarrito),
+                        "El administrador marcó como sin stock el siguiente artículo:"
+                );
+            }
             refrescarTodo();
             persistirEstadoSilencioso();
         } catch (IllegalArgumentException ex) {
@@ -850,7 +993,14 @@ private void agregarSeleccionadoAlCarrito() {
         for (RegistroUsuario u : repoUsuarios.listarTodos()) {
             carritos.add(repoCarritos.cargarCarritoUsuario(u.user(), repoArticulos));
         }
+        ItemCarrito itemEliminado = carritoActual.getItems().get(id);
         servicioTienda.eliminarArticuloEnCascada(id, carritos);
+        if (itemEliminado != null) {
+            notificarYQuitarArticulosNoDisponibles(
+                    List.of(itemEliminado),
+                    "El administrador eliminó del catálogo el siguiente artículo:"
+            );
+        }
         for (RegistroUsuario u : repoUsuarios.listarTodos()) {
             repoCarritos.guardarCarritoUsuario(u.user(), repoCarritos.cargarCarritoUsuario(u.user(), repoArticulos));
         }
@@ -1110,32 +1260,36 @@ private void agregarSeleccionadoAlCarrito() {
         } catch (IOException ignored) {
         }
     }
-
-    private void verificarStockAlAbrirCarrito() {
-        List<ItemCarrito> sinStock = servicioTienda.detectarArticulosSinStock(carritoActual);
-        if (sinStock.isEmpty()) {
-            return;
-        }
-        StringBuilder nombres = new StringBuilder();
-        for (ItemCarrito item : sinStock) {
-            nombres.append("- ").append(item.getArticulo().getNombre())
-                   .append(" (solicitado: ").append(item.getCantidad()).append(")\n");
-        }
-        int opcion = JOptionPane.showOptionDialog(
-                this,
-                "Los siguientes artículos en tu carrito no tienen stock disponible:\n\n" + nombres
-                        + "\n¿Deseas eliminarlos del carrito ahora?",
-                "Artículos sin stock",
-                JOptionPane.YES_NO_OPTION,
-                JOptionPane.WARNING_MESSAGE,
-                null,
-                new Object[]{"Eliminar sin stock", "Mantener por ahora"},
-                "Eliminar sin stock"
-        );
-        if (opcion == JOptionPane.YES_OPTION) {
-            limpiarArticulosSinStock();
-        }
+private void notificarYQuitarArticulosNoDisponibles(List<ItemCarrito> afectados, String encabezado) {
+    if (afectados == null || afectados.isEmpty()) {
+        return;
     }
+    StringBuilder detalle = new StringBuilder();
+    for (ItemCarrito item : afectados) {
+        detalle.append("- ").append(item.getArticulo().getNombre())
+               .append(" (ID: ").append(item.getArticulo().getId())
+               .append(", en carrito: ").append(item.getCantidad()).append(")\n");
+    }
+    JOptionPane.showMessageDialog(
+            this,
+            encabezado + "\n\n" + detalle + "\nSe quitarán de tu carrito de compras.",
+            "Artículo no disponible",
+            JOptionPane.WARNING_MESSAGE
+    );
+    for (ItemCarrito item : afectados) {
+        carritoActual.quitarArticulo(item.getArticulo().getId());
+    }
+    guardarCarritoSiAplica();
+    refrescarCarrito();
+}
+
+private void verificarStockAlAbrirCarrito() {
+    List<ItemCarrito> sinStock = servicioTienda.detectarArticulosSinStock(carritoActual);
+    notificarYQuitarArticulosNoDisponibles(
+            sinStock,
+            "Los siguientes artículos en tu carrito ya no tienen stock disponible:"
+    );
+}
 
     private void eliminarUsuarioComoAdminSwing() {
         if (esInvitado || usuarioActual == null || usuarioActual.rol() != Rol.ADMINISTRADOR) {
@@ -1179,6 +1333,271 @@ private void agregarSeleccionadoAlCarrito() {
             }
         } catch (SecurityException | IllegalArgumentException ex) {
             JOptionPane.showMessageDialog(this, ex.getMessage(), "Error al eliminar usuario", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void aplicarEstiloBase() {
+        rootPanel.setOpaque(true);
+        rootPanel.setBackground(COLOR_PASTEL_CLARO);
+        if (lblSesionActiva != null) {
+            lblSesionActiva.setFont(FUENTE_NEGRITA);
+            lblSesionActiva.setForeground(COLOR_AZUL_MARINO);
+        }
+        if (lblTotalCarrito != null) {
+            lblTotalCarrito.setFont(new Font("Segoe UI", Font.BOLD, 16));
+            lblTotalCarrito.setForeground(COLOR_AZUL_MARINO);
+        }
+        if (lblPreviewImagen != null) {
+            lblPreviewImagen.setFont(FUENTE_NORMAL);
+            lblPreviewImagen.setForeground(COLOR_AZUL_MARINO);
+            lblPreviewImagen.setOpaque(true);
+            lblPreviewImagen.setBackground(COLOR_PANEL_SUAVE);
+            lblPreviewImagen.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(COLOR_AZUL_MARINO, 2, true),
+                    BorderFactory.createEmptyBorder(8, 8, 8, 8)
+            ));
+        }
+        estilizarArbol(rootPanel);
+    }
+
+    private void estilizarArbol(Component comp) {
+        if (comp instanceof JPanel panel) {
+            if (panel.isOpaque()) {
+                panel.setBackground(COLOR_FONDO);
+            }
+            if (panel.getBorder() instanceof javax.swing.border.TitledBorder tb) {
+                tb.setTitleColor(COLOR_AZUL_MARINO);
+                tb.setTitleFont(FUENTE_SUBTITULO);
+                tb.setBorder(BorderFactory.createLineBorder(COLOR_AZUL_MARINO, 2, true));
+            }
+            for (Component hijo : panel.getComponents()) {
+                estilizarArbol(hijo);
+            }
+        } else if (comp instanceof JScrollPane sp) {
+            sp.getViewport().setBackground(Color.WHITE);
+            sp.setBorder(BorderFactory.createLineBorder(COLOR_AZUL_MARINO, 1));
+            estilizarArbol(sp.getViewport().getView());
+        } else if (comp instanceof JTabbedPane tp) {
+            tp.setFont(FUENTE_NEGRITA);
+            tp.setForeground(COLOR_AZUL_MARINO);
+            tp.setBackground(COLOR_PANEL_SUAVE);
+            for (int i = 0; i < tp.getTabCount(); i++) {
+                estilizarArbol(tp.getComponentAt(i));
+            }
+        } else if (comp instanceof JTable tabla) {
+            estilizarTabla(tabla);
+        } else if (comp instanceof JButton btn) {
+            configurarBotonAzul(btn, true);
+        } else if (comp instanceof JPasswordField pf) {
+            pf.setFont(FUENTE_NORMAL);
+            pf.setBackground(Color.WHITE);
+            pf.setForeground(COLOR_AZUL_MARINO);
+            pf.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(COLOR_AZUL_MARINO, 1),
+                    BorderFactory.createEmptyBorder(5, 8, 5, 8)
+            ));
+        } else if (comp instanceof JTextField tf) {
+            tf.setFont(FUENTE_NORMAL);
+            tf.setBackground(Color.WHITE);
+            tf.setForeground(COLOR_AZUL_MARINO);
+            tf.setBorder(BorderFactory.createCompoundBorder(
+                    BorderFactory.createLineBorder(COLOR_AZUL_MARINO, 1),
+                    BorderFactory.createEmptyBorder(5, 8, 5, 8)
+            ));
+        } else if (comp instanceof JComboBox<?> cb) {
+            cb.setFont(FUENTE_NORMAL);
+            cb.setBackground(COLOR_PANEL_SUAVE);
+            cb.setForeground(COLOR_AZUL_MARINO);
+        } else if (comp instanceof JLabel lbl && lbl != lblPreviewImagen) {
+            if (lbl.getFont() == null || lbl.getFont().getSize() < 20) {
+                lbl.setFont(FUENTE_NEGRITA);
+            }
+            lbl.setForeground(COLOR_AZUL_MARINO);
+        }
+    }
+
+    private JButton crearBotonAzul(String texto, boolean primario) {
+        JButton btn = new JButton(texto) {
+            @Override
+            protected void paintComponent(Graphics g) {
+                boolean hover = Boolean.TRUE.equals(getClientProperty("hover"));
+                Color base = primario ? COLOR_AZUL_CIELO : COLOR_SELECCION;
+                Color over = primario ? COLOR_AZUL_CIELO_HOVER : COLOR_AZUL_CIELO;
+                g.setColor(hover ? over : base);
+                g.fillRect(0, 0, getWidth(), getHeight());
+                super.paintComponent(g);
+            }
+        };
+        configurarBotonAzul(btn, primario);
+        return btn;
+    }
+
+    private void configurarBotonAzul(JButton btn, boolean primario) {
+        btn.setFont(primario ? FUENTE_NEGRITA : FUENTE_NORMAL);
+        btn.setOpaque(false);
+        btn.setContentAreaFilled(false);
+        btn.setFocusPainted(false);
+        btn.setForeground(COLOR_AZUL_MARINO);
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        btn.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(COLOR_AZUL_MARINO, primario ? 2 : 1, true),
+                BorderFactory.createEmptyBorder(7, 15, 7, 15)
+        ));
+        if (Boolean.TRUE.equals(btn.getClientProperty("hoverListener"))) {
+            return;
+        }
+        btn.putClientProperty("hoverListener", Boolean.TRUE);
+        btn.putClientProperty("hover", Boolean.FALSE);
+        btn.addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mouseEntered(java.awt.event.MouseEvent e) {
+                btn.putClientProperty("hover", Boolean.TRUE);
+                btn.repaint();
+            }
+
+            @Override
+            public void mouseExited(java.awt.event.MouseEvent e) {
+                btn.putClientProperty("hover", Boolean.FALSE);
+                btn.repaint();
+            }
+        });
+    }
+
+    private void estilizarTabla(JTable tabla) {
+        if (tabla == null) {
+            return;
+        }
+        tabla.setFont(FUENTE_NORMAL);
+        tabla.setForeground(COLOR_AZUL_MARINO);
+        tabla.setBackground(Color.WHITE);
+        tabla.setRowHeight(26);
+        tabla.setShowGrid(true);
+        tabla.setGridColor(COLOR_AZUL_CIELO);
+        tabla.setIntercellSpacing(new Dimension(8, 4));
+        tabla.setSelectionBackground(COLOR_SELECCION);
+        tabla.setSelectionForeground(COLOR_AZUL_MARINO);
+        if (tabla.getTableHeader() != null) {
+            tabla.getTableHeader().setFont(FUENTE_NEGRITA);
+            tabla.getTableHeader().setBackground(COLOR_AZUL_CIELO);
+            tabla.getTableHeader().setForeground(COLOR_AZUL_MARINO);
+        }
+    }
+
+    private JPanel crearTarjeta(String titulo) {
+        JPanel tarjeta = new JPanel() {
+            @Override
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g.create();
+                g2.setPaint(new GradientPaint(0, 0, new Color(224, 242, 254), 0, getHeight(), Color.WHITE));
+                g2.fillRect(0, 0, getWidth(), getHeight());
+                g2.dispose();
+            }
+        };
+        tarjeta.setLayout(new BoxLayout(tarjeta, BoxLayout.Y_AXIS));
+        tarjeta.setOpaque(false);
+        tarjeta.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(COLOR_AZUL_MARINO, 2, true),
+                BorderFactory.createEmptyBorder(20, 22, 20, 22)
+        ));
+        JLabel lblTitulo = new JLabel(titulo);
+        lblTitulo.setFont(FUENTE_SUBTITULO);
+        lblTitulo.setForeground(COLOR_AZUL_MARINO);
+        lblTitulo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        tarjeta.add(lblTitulo);
+        tarjeta.add(Box.createVerticalStrut(14));
+        return tarjeta;
+    }
+
+    private JLabel crearEtiqueta(String texto) {
+        JLabel lbl = new JLabel(texto);
+        lbl.setFont(FUENTE_NEGRITA);
+        lbl.setForeground(COLOR_AZUL_MARINO);
+        lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+        return lbl;
+    }
+
+    private JTextField crearCampoTexto() {
+        JTextField campo = new JTextField();
+        campo.setFont(FUENTE_NORMAL);
+        campo.setBackground(Color.WHITE);
+        campo.setForeground(COLOR_AZUL_MARINO);
+        campo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+        campo.setPreferredSize(new Dimension(260, 34));
+        campo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        campo.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(COLOR_AZUL_MARINO, 1),
+                BorderFactory.createEmptyBorder(4, 8, 4, 8)
+        ));
+        return campo;
+    }
+
+    private JPasswordField crearCampoPassword() {
+        JPasswordField campo = new JPasswordField();
+        campo.setFont(FUENTE_NORMAL);
+        campo.setBackground(Color.WHITE);
+        campo.setForeground(COLOR_AZUL_MARINO);
+        campo.setMaximumSize(new Dimension(Integer.MAX_VALUE, 34));
+        campo.setPreferredSize(new Dimension(260, 34));
+        campo.setAlignmentX(Component.LEFT_ALIGNMENT);
+        campo.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(COLOR_AZUL_MARINO, 1),
+                BorderFactory.createEmptyBorder(4, 8, 4, 8)
+        ));
+        return campo;
+    }
+
+
+    private long ultimaMarcaCatalogo = Long.MIN_VALUE;
+    private long ultimoTamCatalogo = -1L;
+
+    private void sincronizarCatalogoDesdeDisco() {
+        if (!isDisplayable() || (!esInvitado && usuarioActual == null)) {
+            return;
+        }
+        Path archivoCat = Configuracion.ARCHIVO_CATALOGO;
+        if (archivoCat == null || !Files.exists(archivoCat)) {
+            return;
+        }
+        try {
+            long mod = Files.getLastModifiedTime(archivoCat).toMillis();
+            long tam = Files.size(archivoCat);
+            if (mod == ultimaMarcaCatalogo && tam == ultimoTamCatalogo) {
+                return;
+            }
+            ultimaMarcaCatalogo = mod;
+            ultimoTamCatalogo = tam;
+            repoArticulos.cargarDesdeJson(archivoCat, persistencia);
+            List<ItemCarrito> noDisponibles = new ArrayList<>();
+            List<ItemCarrito> snapshotItems = new ArrayList<>(carritoActual.getItems().values());
+            boolean huboCambioCarrito = false;
+            for (ItemCarrito item : snapshotItems) {
+                if (item == null || item.getArticulo() == null) continue;
+                String idArt = item.getArticulo().getId();
+                Optional<Articulo> opt = repoArticulos.buscarPorId(idArt);
+                if (opt.isEmpty() || opt.get().getStock() <= 0) {
+                    noDisponibles.add(item);
+                    huboCambioCarrito = true;
+                } else {
+                    Articulo vigente = opt.get();
+                    if (vigente.getStock() < item.getCantidad()) {
+                        carritoActual.quitarArticulo(idArt);
+                        carritoActual.agregarArticulo(vigente, vigente.getStock());
+                        huboCambioCarrito = true;
+                    }
+                }
+            }
+            refrescarTodo();
+            if (!noDisponibles.isEmpty()) {
+                notificarYQuitarArticulosNoDisponibles(
+                        noDisponibles,
+                        "Un art\u00edculo de tu carrito fue eliminado o se qued\u00f3 sin stock:"
+                );
+            } else if (huboCambioCarrito) {
+                guardarCarritoSiAplica();
+                refrescarCarrito();
+            }
+        } catch (Exception ignored) {
         }
     }
 }
